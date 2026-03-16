@@ -9,6 +9,8 @@ use crossterm::terminal::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
+use chrono::Timelike;
+
 use crate::ambient::AmbientState;
 use crate::auth;
 use crate::config::Config;
@@ -21,8 +23,13 @@ use crate::transition::{Transition, TransitionStyle};
 
 /// Run the screensaver application.
 pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()> {
-    // Select screensaver (registry handles "random" internally)
-    let screensaver_name = &config.general.default_screensaver;
+    // Select screensaver, checking schedule first
+    let screensaver_name = if config.schedule.enabled {
+        scheduled_screensaver(&config.schedule)
+            .unwrap_or(&config.general.default_screensaver)
+    } else {
+        &config.general.default_screensaver
+    };
     let mut saver: Box<dyn Screensaver> = registry::create(screensaver_name, config)
         .unwrap_or_else(|| {
             eprintln!(
@@ -364,6 +371,15 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
         })?;
     }
 
+    // Record session stats
+    {
+        let session_duration = start_time.elapsed();
+        let saver_name = saver.name().to_string();
+        let mut stats = crate::stats::Stats::load();
+        stats.record_session(&saver_name, session_duration);
+        let _ = stats.save();
+    }
+
     // Fade in (reverse)
     if config.general.fade_enabled {
         fade::fade_in(&mut terminal, config.general.fade_duration_ms / 2)?;
@@ -378,4 +394,19 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
     )?;
 
     Ok(())
+}
+
+fn scheduled_screensaver(schedule: &crate::config::ScheduleConfig) -> Option<&str> {
+    let hour = chrono::Local::now().hour();
+    let name = match hour {
+        6..=11 => &schedule.morning,
+        12..=17 => &schedule.afternoon,
+        18..=21 => &schedule.evening,
+        _ => &schedule.night, // 22-23, 0-5
+    };
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.as_str())
+    }
 }

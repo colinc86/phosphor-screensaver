@@ -1,9 +1,10 @@
 use crate::config::Config;
 use crate::screensaver::Screensaver;
 use crate::screensavers::{
-    analog_clock::AnalogClock, bouncing_ball::BouncingBall, digital_clock::DigitalClock,
-    fluid::Fluid, game_of_life::GameOfLife, lissajous::Lissajous, matrix_rain::MatrixRain,
-    pipes::Pipes, starfield::Starfield, terrain::Terrain,
+    analog_clock::AnalogClock, aurora::Aurora, bouncing_ball::BouncingBall,
+    digital_clock::DigitalClock, fluid::Fluid, game_of_life::GameOfLife, lissajous::Lissajous,
+    matrix_rain::MatrixRain, maze::Maze, pipes::Pipes, plasma::Plasma, starfield::Starfield,
+    terrain::Terrain,
 };
 use crate::theme::Theme;
 
@@ -86,6 +87,24 @@ pub const SCREENSAVERS: &[ScreensaverInfo] = &[
         features: &["Procedural generation", "Depth fog", "Configurable altitude and speed"],
     },
     ScreensaverInfo {
+        name: "aurora",
+        description: "Northern lights with undulating ribbons of color",
+        key_bindings: &[("Any key", "Exit screensaver")],
+        features: &["Sine-wave ribbon motion", "Additive color blending", "Multiple palettes"],
+    },
+    ScreensaverInfo {
+        name: "plasma",
+        description: "Demoscene plasma effect with morphing rainbow waves",
+        key_bindings: &[("Any key", "Exit screensaver")],
+        features: &["Classic 4-term plasma", "Fill and braille render modes", "Multiple color palettes"],
+    },
+    ScreensaverInfo {
+        name: "maze",
+        description: "Maze generation and solving with animated pathfinding",
+        key_bindings: &[("Any key", "Exit screensaver")],
+        features: &["Recursive backtracking generation", "A* pathfinding", "Configurable wall styles"],
+    },
+    ScreensaverInfo {
         name: "random",
         description: "Randomly selects a screensaver each time",
         key_bindings: &[],
@@ -131,6 +150,9 @@ pub fn create(name: &str, config: &Config) -> Option<Box<dyn Screensaver>> {
             &config.screensavers.terrain,
             theme,
         ))),
+        "aurora" => Some(Box::new(Aurora::new(&config.screensavers.aurora, theme))),
+        "plasma" => Some(Box::new(Plasma::new(&config.screensavers.plasma, theme))),
+        "maze" => Some(Box::new(Maze::new(&config.screensavers.maze, theme))),
         "random" => Some(create_random(config)),
         _ => None,
     }
@@ -169,6 +191,9 @@ pub fn create_random(config: &Config) -> Box<dyn Screensaver> {
         "lissajous" => Box::new(Lissajous::new(&config.screensavers.lissajous, theme)),
         "fluid" => Box::new(Fluid::new(&config.screensavers.fluid, theme)),
         "terrain" => Box::new(Terrain::new(&config.screensavers.terrain, theme)),
+        "aurora" => Box::new(Aurora::new(&config.screensavers.aurora, theme)),
+        "plasma" => Box::new(Plasma::new(&config.screensavers.plasma, theme)),
+        "maze" => Box::new(Maze::new(&config.screensavers.maze, theme)),
         _ => Box::new(Starfield::new(&config.screensavers.starfield, theme)),
     }
 }
@@ -211,6 +236,9 @@ mod tests {
         assert!(all.contains(&"lissajous"));
         assert!(all.contains(&"fluid"));
         assert!(all.contains(&"terrain"));
+        assert!(all.contains(&"aurora"));
+        assert!(all.contains(&"plasma"));
+        assert!(all.contains(&"maze"));
     }
 
     #[test]

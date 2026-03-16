@@ -125,7 +125,7 @@ impl MenuUI {
             SettingEntry::Header("General"),
             SettingEntry::Setting { label: "Timeout (seconds)", value: c.general.timeout.to_string(), kind: EditKind::U64, choices: None },
             SettingEntry::Setting { label: "FPS", value: c.general.fps.to_string(), kind: EditKind::U32, choices: None },
-            SettingEntry::Setting { label: "Default Screensaver", value: c.general.default_screensaver.clone(), kind: EditKind::Text, choices: Some(saver_names) },
+            SettingEntry::Setting { label: "Default Screensaver", value: c.general.default_screensaver.clone(), kind: EditKind::Text, choices: Some(saver_names.clone()) },
             SettingEntry::Setting { label: "Fade Enabled", value: c.general.fade_enabled.to_string(), kind: EditKind::Bool, choices: None },
             SettingEntry::Setting { label: "Fade Duration (ms)", value: c.general.fade_duration_ms.to_string(), kind: EditKind::U64, choices: None },
             SettingEntry::Setting { label: "Ambient Enabled", value: c.general.ambient_enabled.to_string(), kind: EditKind::Bool, choices: None },
@@ -156,6 +156,13 @@ impl MenuUI {
             SettingEntry::Setting { label: "Battery Aware", value: c.power.battery_aware.to_string(), kind: EditKind::Bool, choices: None },
             SettingEntry::Setting { label: "Battery FPS", value: c.power.battery_fps.to_string(), kind: EditKind::U32, choices: None },
             SettingEntry::Setting { label: "AC FPS", value: c.power.ac_fps.to_string(), kind: EditKind::U32, choices: None },
+
+            SettingEntry::Header("Schedule"),
+            SettingEntry::Setting { label: "Enabled", value: c.schedule.enabled.to_string(), kind: EditKind::Bool, choices: None },
+            SettingEntry::Setting { label: "Morning (6am-12pm)", value: c.schedule.morning.clone(), kind: EditKind::Text, choices: Some(saver_names.clone()) },
+            SettingEntry::Setting { label: "Afternoon (12pm-6pm)", value: c.schedule.afternoon.clone(), kind: EditKind::Text, choices: Some(saver_names.clone()) },
+            SettingEntry::Setting { label: "Evening (6pm-10pm)", value: c.schedule.evening.clone(), kind: EditKind::Text, choices: Some(saver_names.clone()) },
+            SettingEntry::Setting { label: "Night (10pm-6am)", value: c.schedule.night.clone(), kind: EditKind::Text, choices: Some(saver_names) },
 
             SettingEntry::Header("Theme"),
             SettingEntry::Setting { label: "Name", value: c.theme.name.clone(), kind: EditKind::Text, choices: Some(theme_names) },
@@ -195,8 +202,14 @@ impl MenuUI {
             20 => c.power.battery_aware = !c.power.battery_aware,
             21 => { if let Ok(v) = value.parse() { c.power.battery_fps = v; } }
             22 => { if let Ok(v) = value.parse() { c.power.ac_fps = v; } }
+            // Schedule
+            23 => c.schedule.enabled = !c.schedule.enabled,
+            24 => c.schedule.morning = value.to_string(),
+            25 => c.schedule.afternoon = value.to_string(),
+            26 => c.schedule.evening = value.to_string(),
+            27 => c.schedule.night = value.to_string(),
             // Theme
-            23 => c.theme.name = value.to_string(),
+            28 => c.theme.name = value.to_string(),
             _ => {}
         }
     }
@@ -259,6 +272,10 @@ impl MenuUI {
                 ("Trail Length".into(), c.bouncing_ball.trail_length.to_string(), EditKind::USize, None),
                 ("Ball Character".into(), c.bouncing_ball.ball_char.clone(), EditKind::Text, None),
                 ("Color".into(), c.bouncing_ball.color.clone(), EditKind::Text, None),
+                ("Ball Count".into(), c.bouncing_ball.ball_count.to_string(), EditKind::USize, None),
+                ("Gravity".into(), c.bouncing_ball.gravity.clone(), EditKind::Text, Some(vec!["none".into(), "down".into(), "center".into(), "wave".into()])),
+                ("Trail Style".into(), c.bouncing_ball.trail_style.clone(), EditKind::Text, Some(vec!["dots".into(), "fire".into(), "rainbow".into()])),
+                ("Collisions".into(), c.bouncing_ball.collisions.to_string(), EditKind::Bool, None),
             ],
             "starfield" => vec![
                 ("Star Count".into(), c.starfield.star_count.to_string(), EditKind::USize, None),
@@ -270,6 +287,10 @@ impl MenuUI {
                 ("Density".into(), format!("{:.2}", c.matrix_rain.density), EditKind::F64, None),
                 ("Speed".into(), format!("{:.1}", c.matrix_rain.speed), EditKind::F64, None),
                 ("Charset".into(), c.matrix_rain.charset.clone(), EditKind::Text, Some(vec!["katakana".into(), "ascii".into(), "binary".into()])),
+                ("Depth Layers".into(), c.matrix_rain.depth_layers.to_string(), EditKind::Bool, None),
+                ("Glitch Wave".into(), c.matrix_rain.glitch_wave.to_string(), EditKind::Bool, None),
+                ("Glitch Interval (s)".into(), c.matrix_rain.glitch_interval_secs.to_string(), EditKind::U64, None),
+                ("Interactive".into(), c.matrix_rain.interactive.to_string(), EditKind::Bool, None),
             ],
             "pipes" => vec![
                 ("Palette".into(), c.pipes.palette.clone(), EditKind::Text, Some(vec!["rainbow".into(), "theme".into(), "mono".into()])),
@@ -279,9 +300,13 @@ impl MenuUI {
                 ("Flow Speed".into(), format!("{:.1}", c.pipes.flow_speed), EditKind::F64, None),
             ],
             "digital_clock" => vec![
-                ("Style".into(), c.digital_clock.style.clone(), EditKind::Text, Some(vec!["block".into(), "thin".into()])),
+                ("Style".into(), c.digital_clock.style.clone(), EditKind::Text, Some(vec!["block".into(), "thin".into(), "segment".into()])),
                 ("Show Date".into(), c.digital_clock.show_date.to_string(), EditKind::Bool, None),
                 ("Color".into(), c.digital_clock.color.clone(), EditKind::Text, None),
+                ("Color Cycle".into(), c.digital_clock.color_cycle.to_string(), EditKind::Bool, None),
+                ("Color Cycle Speed".into(), format!("{:.1}", c.digital_clock.color_cycle_speed), EditKind::F64, None),
+                ("Mode".into(), c.digital_clock.mode.clone(), EditKind::Text, Some(vec!["clock".into(), "stopwatch".into(), "countdown".into()])),
+                ("Countdown Minutes".into(), c.digital_clock.countdown_minutes.to_string(), EditKind::U64, None),
             ],
             "game_of_life" => vec![
                 ("Initial Density".into(), format!("{:.2}", c.game_of_life.initial_density), EditKind::F64, None),
@@ -317,6 +342,24 @@ impl MenuUI {
                 ("Palette".into(), c.terrain.palette.clone(), EditKind::Text, Some(vec!["earth".into(), "alien".into(), "desert".into()])),
                 ("Fog".into(), c.terrain.fog.to_string(), EditKind::Bool, None),
             ],
+            "aurora" => vec![
+                ("Ribbon Count".into(), c.aurora.ribbon_count.to_string(), EditKind::USize, None),
+                ("Speed".into(), format!("{:.1}", c.aurora.speed), EditKind::F64, None),
+                ("Intensity".into(), format!("{:.1}", c.aurora.intensity), EditKind::F64, None),
+                ("Palette".into(), c.aurora.palette.clone(), EditKind::Text, Some(vec!["classic".into(), "warm".into(), "mono".into()])),
+            ],
+            "plasma" => vec![
+                ("Speed".into(), format!("{:.1}", c.plasma.speed), EditKind::F64, None),
+                ("Scale".into(), format!("{:.1}", c.plasma.scale), EditKind::F64, None),
+                ("Mode".into(), c.plasma.mode.clone(), EditKind::Text, Some(vec!["fill".into(), "braille".into()])),
+                ("Color Mode".into(), c.plasma.color_mode.clone(), EditKind::Text, Some(vec!["rainbow".into(), "fire".into(), "ocean".into(), "mono".into()])),
+            ],
+            "maze" => vec![
+                ("Generation Speed".into(), format!("{:.1}", c.maze.generation_speed), EditKind::F64, None),
+                ("Solve Speed".into(), format!("{:.1}", c.maze.solve_speed), EditKind::F64, None),
+                ("Wall Style".into(), c.maze.wall_style.clone(), EditKind::Text, Some(vec!["box".into(), "thick".into(), "ascii".into()])),
+                ("Show Exploration".into(), c.maze.show_exploration.to_string(), EditKind::Bool, None),
+            ],
             _ => vec![],
         }
     }
@@ -329,6 +372,10 @@ impl MenuUI {
                 0 => { if let Ok(v) = value.parse() { c.bouncing_ball.trail_length = v; } }
                 1 => c.bouncing_ball.ball_char = value.to_string(),
                 2 => c.bouncing_ball.color = value.to_string(),
+                3 => { if let Ok(v) = value.parse::<usize>() { c.bouncing_ball.ball_count = v.max(1); } }
+                4 => c.bouncing_ball.gravity = value.to_string(),
+                5 => c.bouncing_ball.trail_style = value.to_string(),
+                6 => { if let Ok(v) = value.parse() { c.bouncing_ball.collisions = v; } }
                 _ => {}
             },
             "starfield" => match idx {
@@ -342,6 +389,10 @@ impl MenuUI {
                 0 => { if let Ok(v) = value.parse() { c.matrix_rain.density = v; } }
                 1 => { if let Ok(v) = value.parse() { c.matrix_rain.speed = v; } }
                 2 => c.matrix_rain.charset = value.to_string(),
+                3 => c.matrix_rain.depth_layers = !c.matrix_rain.depth_layers,
+                4 => c.matrix_rain.glitch_wave = !c.matrix_rain.glitch_wave,
+                5 => { if let Ok(v) = value.parse() { c.matrix_rain.glitch_interval_secs = v; } }
+                6 => c.matrix_rain.interactive = !c.matrix_rain.interactive,
                 _ => {}
             },
             "pipes" => match idx {
@@ -356,6 +407,10 @@ impl MenuUI {
                 0 => c.digital_clock.style = value.to_string(),
                 1 => c.digital_clock.show_date = !c.digital_clock.show_date,
                 2 => c.digital_clock.color = value.to_string(),
+                3 => c.digital_clock.color_cycle = !c.digital_clock.color_cycle,
+                4 => { if let Ok(v) = value.parse() { c.digital_clock.color_cycle_speed = v; } }
+                5 => c.digital_clock.mode = value.to_string(),
+                6 => { if let Ok(v) = value.parse() { c.digital_clock.countdown_minutes = v; } }
                 _ => {}
             },
             "game_of_life" => match idx {
@@ -395,6 +450,27 @@ impl MenuUI {
                 2 => { if let Ok(v) = value.parse() { c.terrain.draw_distance = v; } }
                 3 => c.terrain.palette = value.to_string(),
                 4 => c.terrain.fog = !c.terrain.fog,
+                _ => {}
+            },
+            "aurora" => match idx {
+                0 => { if let Ok(v) = value.parse() { c.aurora.ribbon_count = v; } }
+                1 => { if let Ok(v) = value.parse() { c.aurora.speed = v; } }
+                2 => { if let Ok(v) = value.parse() { c.aurora.intensity = v; } }
+                3 => c.aurora.palette = value.to_string(),
+                _ => {}
+            },
+            "plasma" => match idx {
+                0 => { if let Ok(v) = value.parse() { c.plasma.speed = v; } }
+                1 => { if let Ok(v) = value.parse() { c.plasma.scale = v; } }
+                2 => c.plasma.mode = value.to_string(),
+                3 => c.plasma.color_mode = value.to_string(),
+                _ => {}
+            },
+            "maze" => match idx {
+                0 => { if let Ok(v) = value.parse() { c.maze.generation_speed = v; } }
+                1 => { if let Ok(v) = value.parse() { c.maze.solve_speed = v; } }
+                2 => c.maze.wall_style = value.to_string(),
+                3 => c.maze.show_exploration = !c.maze.show_exploration,
                 _ => {}
             },
             _ => {}
@@ -972,9 +1048,9 @@ mod tests {
         let ui = MenuUI::new(Config::default(), MenuContext::Standalone);
         let entries = ui.setting_entries();
         let setting_count = entries.iter().filter(|e| matches!(e, SettingEntry::Setting { .. })).count();
-        assert_eq!(setting_count, 24);
+        assert_eq!(setting_count, 29);
         let header_count = entries.iter().filter(|e| matches!(e, SettingEntry::Header(_))).count();
-        assert_eq!(header_count, 7);
+        assert_eq!(header_count, 8);
     }
 
     #[test]

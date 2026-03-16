@@ -1,6 +1,7 @@
 mod ambient;
 mod app;
 mod auth;
+mod compositor;
 mod config;
 mod fade;
 mod gallery;
@@ -10,6 +11,7 @@ mod power;
 mod registry;
 mod screensaver;
 mod screensavers;
+mod stats;
 mod theme;
 mod transition;
 mod watch;
@@ -42,6 +44,10 @@ enum Command {
         /// Disable fade transition
         #[arg(long)]
         no_fade: bool,
+
+        /// Run two screensavers in split-screen (e.g., "starfield|matrix_rain" for vertical, "starfield/matrix_rain" for horizontal)
+        #[arg(long)]
+        split: Option<String>,
     },
 
     /// Open interactive TUI configuration
@@ -72,6 +78,9 @@ enum Command {
 
     /// Show all screensavers in a live split-screen gallery
     Gallery,
+
+    /// Show usage statistics
+    Stats,
 
     /// Background idle watcher (used by shell integration)
     Watch {
@@ -115,9 +124,32 @@ fn main() {
             screensaver,
             fps,
             no_fade,
+            split,
         }) => {
             config.merge_cli(screensaver.as_deref(), fps, no_fade);
-            if let Err(e) = app::run(&config, None) {
+            if let Some(split_str) = split {
+                // Parse split string
+                let (left, right, orientation) = if let Some(pos) = split_str.find('|') {
+                    (
+                        &split_str[..pos],
+                        &split_str[pos + 1..],
+                        compositor::SplitOrientation::Vertical,
+                    )
+                } else if let Some(pos) = split_str.find('/') {
+                    (
+                        &split_str[..pos],
+                        &split_str[pos + 1..],
+                        compositor::SplitOrientation::Horizontal,
+                    )
+                } else {
+                    eprintln!("Invalid split format. Use 'name1|name2' for vertical or 'name1/name2' for horizontal");
+                    std::process::exit(1);
+                };
+                if let Err(e) = compositor::run(&config, left, right, orientation, None) {
+                    eprintln!("Error: {e}");
+                    std::process::exit(1);
+                }
+            } else if let Err(e) = app::run(&config, None) {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -152,6 +184,11 @@ fn main() {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
+        }
+
+        Some(Command::Stats) => {
+            let stats = stats::Stats::load();
+            println!("{}", stats.format_summary());
         }
 
         Some(Command::Watch { shell_pid, timeout }) => {

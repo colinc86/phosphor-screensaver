@@ -1,10 +1,13 @@
 pub mod analog_clock;
+pub mod aurora;
 pub mod bouncing_ball;
 pub mod digital_clock;
 pub mod fluid;
 pub mod game_of_life;
 pub mod lissajous;
 pub mod matrix_rain;
+pub mod maze;
+pub mod plasma;
 pub mod pipes;
 pub mod starfield;
 pub mod terrain;

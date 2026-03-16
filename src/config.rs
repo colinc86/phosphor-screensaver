@@ -10,6 +10,8 @@ pub struct Config {
     pub blanking: BlankingConfig,
     pub power: PowerConfig,
     pub theme: ThemeConfig,
+    pub schedule: ScheduleConfig,
+    pub compositor: CompositorConfig,
     pub screensavers: ScreensaverConfigs,
 }
 
@@ -82,6 +84,16 @@ pub struct ThemeConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+pub struct ScheduleConfig {
+    pub enabled: bool,
+    pub morning: String,    // 6am-12pm
+    pub afternoon: String,  // 12pm-6pm
+    pub evening: String,    // 6pm-10pm
+    pub night: String,      // 10pm-6am
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ScreensaverConfigs {
     pub bouncing_ball: BouncingBallConfig,
     pub starfield: StarfieldConfig,
@@ -93,6 +105,9 @@ pub struct ScreensaverConfigs {
     pub lissajous: LissajousConfig,
     pub fluid: FluidConfig,
     pub terrain: TerrainConfig,
+    pub aurora: AuroraConfig,
+    pub plasma: PlasmaConfig,
+    pub maze: MazeConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +116,10 @@ pub struct BouncingBallConfig {
     pub trail_length: usize,
     pub ball_char: String,
     pub color: String,
+    pub ball_count: usize,
+    pub gravity: String,
+    pub trail_style: String,
+    pub collisions: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +137,10 @@ pub struct MatrixRainConfig {
     pub density: f64,
     pub speed: f64,
     pub charset: String,
+    pub depth_layers: bool,
+    pub glitch_wave: bool,
+    pub glitch_interval_secs: u64,
+    pub interactive: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +159,10 @@ pub struct DigitalClockConfig {
     pub style: String,
     pub show_date: bool,
     pub color: String,
+    pub color_cycle: bool,
+    pub color_cycle_speed: f64,
+    pub mode: String,
+    pub countdown_minutes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,6 +214,40 @@ pub struct TerrainConfig {
     pub fog: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AuroraConfig {
+    pub ribbon_count: usize,
+    pub speed: f64,
+    pub intensity: f64,
+    pub palette: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlasmaConfig {
+    pub speed: f64,
+    pub scale: f64,
+    pub mode: String,
+    pub color_mode: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MazeConfig {
+    pub generation_speed: f64,
+    pub solve_speed: f64,
+    pub wall_style: String,
+    pub show_exploration: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CompositorConfig {
+    pub divider_style: String,
+    pub split_ratio: f64,
+}
+
 // --- Default implementations ---
 
 impl Default for Config {
@@ -198,6 +259,8 @@ impl Default for Config {
             blanking: BlankingConfig::default(),
             power: PowerConfig::default(),
             theme: ThemeConfig::default(),
+            schedule: ScheduleConfig::default(),
+            compositor: CompositorConfig::default(),
             screensavers: ScreensaverConfigs::default(),
         }
     }
@@ -290,6 +353,18 @@ impl Default for ThemeConfig {
     }
 }
 
+impl Default for ScheduleConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            morning: String::new(),
+            afternoon: String::new(),
+            evening: String::new(),
+            night: String::new(),
+        }
+    }
+}
+
 impl Default for ScreensaverConfigs {
     fn default() -> Self {
         Self {
@@ -303,6 +378,9 @@ impl Default for ScreensaverConfigs {
             lissajous: LissajousConfig::default(),
             fluid: FluidConfig::default(),
             terrain: TerrainConfig::default(),
+            aurora: AuroraConfig::default(),
+            plasma: PlasmaConfig::default(),
+            maze: MazeConfig::default(),
         }
     }
 }
@@ -311,8 +389,12 @@ impl Default for BouncingBallConfig {
     fn default() -> Self {
         Self {
             trail_length: 20,
-            ball_char: "●".into(),
+            ball_char: "\u{25CF}".into(),
             color: "cyan".into(),
+            ball_count: 1,
+            gravity: "none".into(),
+            trail_style: "dots".into(),
+            collisions: true,
         }
     }
 }
@@ -334,6 +416,10 @@ impl Default for MatrixRainConfig {
             density: 0.8,
             speed: 1.0,
             charset: "katakana".into(),
+            depth_layers: false,
+            glitch_wave: false,
+            glitch_interval_secs: 25,
+            interactive: false,
         }
     }
 }
@@ -356,6 +442,10 @@ impl Default for DigitalClockConfig {
             style: "block".into(),
             show_date: true,
             color: "green".into(),
+            color_cycle: false,
+            color_cycle_speed: 1.0,
+            mode: "clock".into(),
+            countdown_minutes: 25,
         }
     }
 }
@@ -415,6 +505,48 @@ impl Default for TerrainConfig {
             draw_distance: 300.0,
             palette: "earth".into(),
             fog: true,
+        }
+    }
+}
+
+impl Default for AuroraConfig {
+    fn default() -> Self {
+        Self {
+            ribbon_count: 4,
+            speed: 0.5,
+            intensity: 0.8,
+            palette: "classic".into(),
+        }
+    }
+}
+
+impl Default for PlasmaConfig {
+    fn default() -> Self {
+        Self {
+            speed: 1.0,
+            scale: 8.0,
+            mode: "fill".into(),
+            color_mode: "rainbow".into(),
+        }
+    }
+}
+
+impl Default for MazeConfig {
+    fn default() -> Self {
+        Self {
+            generation_speed: 1.0,
+            solve_speed: 1.0,
+            wall_style: "box".into(),
+            show_exploration: true,
+        }
+    }
+}
+
+impl Default for CompositorConfig {
+    fn default() -> Self {
+        Self {
+            divider_style: "line".into(),
+            split_ratio: 0.5,
         }
     }
 }
