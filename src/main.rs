@@ -1,13 +1,18 @@
+mod ambient;
 mod app;
+mod auth;
 mod config;
 mod fade;
+mod gallery;
+mod menu;
 mod overlay;
 mod power;
 mod registry;
 mod screensaver;
 mod screensavers;
 mod theme;
-mod tui_config;
+mod transition;
+mod watch;
 
 use std::time::Duration;
 
@@ -64,6 +69,20 @@ enum Command {
 
     /// Print the configured timeout value (for shell integration)
     PrintTimeout,
+
+    /// Show all screensavers in a live split-screen gallery
+    Gallery,
+
+    /// Background idle watcher (used by shell integration)
+    Watch {
+        /// PID of the parent shell
+        #[arg(long)]
+        shell_pid: u32,
+
+        /// Idle timeout in seconds
+        #[arg(long)]
+        timeout: u64,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -77,25 +96,28 @@ fn main() {
     let mut config = Config::load();
 
     match cli.command {
-        None | Some(Command::Run { .. }) => {
-            // Extract run args if present
-            if let Some(Command::Run {
-                screensaver,
-                fps,
-                no_fade,
-            }) = cli.command
-            {
-                config.merge_cli(screensaver.as_deref(), fps, no_fade);
-            }
-
-            if let Err(e) = app::run(&config, None) {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
+        None | Some(Command::Config) => {
+            // No subcommand or `config`: open interactive menu
+            loop {
+                match menu::run(&config, menu::MenuContext::Standalone) {
+                    Ok(menu::MenuResult::Launch(name)) => {
+                        config.general.default_screensaver = name;
+                        config.general.fade_enabled = false;
+                        let _ = app::run(&config, None);
+                        config = Config::load(); // Reload any saved changes
+                    }
+                    _ => break,
+                }
             }
         }
 
-        Some(Command::Config) => {
-            if let Err(e) = tui_config::run(config) {
+        Some(Command::Run {
+            screensaver,
+            fps,
+            no_fade,
+        }) => {
+            config.merge_cli(screensaver.as_deref(), fps, no_fade);
+            if let Err(e) = app::run(&config, None) {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -124,6 +146,20 @@ fn main() {
         Some(Command::PrintTimeout) => {
             println!("{}", config.general.timeout);
         }
+
+        Some(Command::Gallery) => {
+            if let Err(e) = gallery::run(&config) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+
+        Some(Command::Watch { shell_pid, timeout }) => {
+            if let Err(e) = watch::run(shell_pid, timeout, &config) {
+                eprintln!("Watch error: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 
@@ -138,26 +174,23 @@ fn print_shell_init(shell: &ShellType, config: &Config) {
 # Guard: only run in interactive shells
 [[ $- != *i* ]] && return
 
-# Guard: don't activate inside nested shells if already active
+# Guard: don't activate inside nested shells
 [[ -n "$TERMSAVER_ACTIVE" ]] && return
 
-# Set TMOUT to trigger ALRM after idle period
-TMOUT={timeout}
+# Kill existing watcher from previous source
+[[ -n "$_TS_WATCHER_PID" ]] && kill "$_TS_WATCHER_PID" 2>/dev/null
 
-# Trap ALRM signal -- bash sends this when TMOUT expires at prompt
-__termsaver_activate() {{
-    # Don't activate if stdin isn't a terminal
-    [[ ! -t 0 ]] && return
+# Heartbeat file — mtime tracks when the user last ran a command
+_TS_HEARTBEAT="/tmp/.ts_heartbeat_$$"
+: > "$_TS_HEARTBEAT"
 
-    # Don't activate if another instance is running
-    [[ -n "$TERMSAVER_ACTIVE" ]] && return
+# Start background watcher (monitors heartbeat, takes over terminal when idle)
+command termsaver watch --shell-pid $$ --timeout {timeout} &
+_TS_WATCHER_PID=$!
+disown "$_TS_WATCHER_PID" 2>/dev/null
 
-    export TERMSAVER_ACTIVE=1
-    termsaver run
-    unset TERMSAVER_ACTIVE
-}}
-
-trap '__termsaver_activate' ALRM
+# Update heartbeat on each prompt
+PROMPT_COMMAND=": > $_TS_HEARTBEAT${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
 "#
             );
         }
@@ -180,9 +213,13 @@ TRAPALRM() {{
     [[ ! -t 0 ]] && return
     [[ -n "$TERMSAVER_ACTIVE" ]] && return
 
+    unset TMOUT
+
     export TERMSAVER_ACTIVE=1
     termsaver run
     unset TERMSAVER_ACTIVE
+
+    TMOUT={timeout}
 }}
 "#
             );

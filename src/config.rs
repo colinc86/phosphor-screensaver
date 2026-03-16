@@ -21,6 +21,8 @@ pub struct GeneralConfig {
     pub default_screensaver: String,
     pub fade_enabled: bool,
     pub fade_duration_ms: u64,
+    pub ambient_enabled: bool,
+    pub ambient_intensity: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +31,8 @@ pub struct RotateConfig {
     pub enabled: bool,
     pub interval_secs: u64,
     pub screensavers: Vec<String>,
+    pub transition_style: String,
+    pub transition_duration_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +56,7 @@ pub struct ClockOverlayConfig {
 pub struct LockOverlayConfig {
     pub enabled: bool,
     pub message: String,
+    pub password_required: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +89,10 @@ pub struct ScreensaverConfigs {
     pub pipes: PipesConfig,
     pub digital_clock: DigitalClockConfig,
     pub game_of_life: GameOfLifeConfig,
+    pub analog_clock: AnalogClockConfig,
+    pub lissajous: LissajousConfig,
+    pub fluid: FluidConfig,
+    pub terrain: TerrainConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +108,8 @@ pub struct BouncingBallConfig {
 pub struct StarfieldConfig {
     pub star_count: usize,
     pub speed: f64,
+    pub streak_enabled: bool,
+    pub warp_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +125,9 @@ pub struct MatrixRainConfig {
 pub struct PipesConfig {
     pub palette: String,
     pub turn_probability: f64,
+    pub junctions: bool,
+    pub flow_enabled: bool,
+    pub flow_speed: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,6 +144,47 @@ pub struct GameOfLifeConfig {
     pub initial_density: f64,
     pub cell_char: String,
     pub auto_reset_secs: u64,
+    pub color_by_age: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnalogClockConfig {
+    pub show_seconds: bool,
+    pub show_date: bool,
+    pub color: String,
+    pub timezone: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LissajousConfig {
+    pub speed: f64,
+    pub trail_length: usize,
+    pub damping: f64,
+    pub color_mode: String,
+    pub morph_interval_secs: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FluidConfig {
+    pub viscosity: f64,
+    pub diffusion: f64,
+    pub force_strength: f64,
+    pub interactive: bool,
+    pub color_mode: String,
+    pub solver_iterations: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TerrainConfig {
+    pub speed: f64,
+    pub altitude: f64,
+    pub draw_distance: f64,
+    pub palette: String,
+    pub fog: bool,
 }
 
 // --- Default implementations ---
@@ -156,6 +211,8 @@ impl Default for GeneralConfig {
             default_screensaver: "starfield".into(),
             fade_enabled: true,
             fade_duration_ms: 500,
+            ambient_enabled: false,
+            ambient_intensity: 0.5,
         }
     }
 }
@@ -170,6 +227,8 @@ impl Default for RotateConfig {
                 "matrix_rain".into(),
                 "pipes".into(),
             ],
+            transition_style: "dissolve".into(),
+            transition_duration_ms: 800,
         }
     }
 }
@@ -199,6 +258,7 @@ impl Default for LockOverlayConfig {
         Self {
             enabled: false,
             message: "Press any key to return".into(),
+            password_required: false,
         }
     }
 }
@@ -239,6 +299,10 @@ impl Default for ScreensaverConfigs {
             pipes: PipesConfig::default(),
             digital_clock: DigitalClockConfig::default(),
             game_of_life: GameOfLifeConfig::default(),
+            analog_clock: AnalogClockConfig::default(),
+            lissajous: LissajousConfig::default(),
+            fluid: FluidConfig::default(),
+            terrain: TerrainConfig::default(),
         }
     }
 }
@@ -258,6 +322,8 @@ impl Default for StarfieldConfig {
         Self {
             star_count: 200,
             speed: 1.0,
+            streak_enabled: true,
+            warp_enabled: true,
         }
     }
 }
@@ -277,6 +343,9 @@ impl Default for PipesConfig {
         Self {
             palette: "rainbow".into(),
             turn_probability: 0.3,
+            junctions: true,
+            flow_enabled: true,
+            flow_speed: 1.0,
         }
     }
 }
@@ -297,6 +366,55 @@ impl Default for GameOfLifeConfig {
             initial_density: 0.3,
             cell_char: "█".into(),
             auto_reset_secs: 60,
+            color_by_age: true,
+        }
+    }
+}
+
+impl Default for AnalogClockConfig {
+    fn default() -> Self {
+        Self {
+            show_seconds: true,
+            show_date: true,
+            color: "cyan".into(),
+            timezone: String::new(),
+        }
+    }
+}
+
+impl Default for LissajousConfig {
+    fn default() -> Self {
+        Self {
+            speed: 1.0,
+            trail_length: 3000,
+            damping: 0.002,
+            color_mode: "rainbow".into(),
+            morph_interval_secs: 8.0,
+        }
+    }
+}
+
+impl Default for FluidConfig {
+    fn default() -> Self {
+        Self {
+            viscosity: 0.0001,
+            diffusion: 0.00001,
+            force_strength: 5.0,
+            interactive: true,
+            color_mode: "rainbow".into(),
+            solver_iterations: 4,
+        }
+    }
+}
+
+impl Default for TerrainConfig {
+    fn default() -> Self {
+        Self {
+            speed: 1.0,
+            altitude: 80.0,
+            draw_distance: 300.0,
+            palette: "earth".into(),
+            fog: true,
         }
     }
 }
