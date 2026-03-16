@@ -55,8 +55,11 @@ pub fn run(shell_pid: u32, timeout: u64, _config: &Config) -> io::Result<()> {
         // Leading space prevents bash from adding it to history
         if inject_input(tty_fd, b" termsaver run\n").is_err() {
             // TIOCSTI not available — exit gracefully
+            #[cfg(target_os = "linux")]
             eprintln!("termsaver: TIOCSTI ioctl not available. \
                 Enable with: sudo sysctl dev.tty.legacy_tiocsti=1");
+            #[cfg(not(target_os = "linux"))]
+            eprintln!("termsaver: TIOCSTI ioctl not available.");
             break;
         }
 
@@ -84,7 +87,11 @@ pub fn run(shell_pid: u32, timeout: u64, _config: &Config) -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 const TIOCSTI: libc::c_ulong = 0x5412;
+
+#[cfg(target_os = "macos")]
+const TIOCSTI: libc::c_ulong = 0x80017472;
 
 fn inject_input(tty_fd: i32, input: &[u8]) -> io::Result<()> {
     for &byte in input {
