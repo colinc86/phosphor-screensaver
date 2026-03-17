@@ -1,24 +1,19 @@
-[package]
-name = "termsaver"
-version = "0.1.0"
-edition = "2024"
-
-[features]
-default = ["pam"]
-pam = []
-
-[dependencies]
-ratatui = "0.29"
-crossterm = "0.29"
-clap = { version = "4", features = ["derive"] }
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
-dirs = "6"
-rand = "0.9"
-chrono = "0.4"
-chrono-tz = "0.10"
-libc = "0.2"
-
-[dev-dependencies]
-insta = "1"
-tempfile = "3"
+[workspace]
+members = [
+    "crates/termsaver",
+    "crates/termsaver-plugin",
+    "savers/analog_clock",
+    "savers/aurora",
+    "savers/bouncing_ball",
+    "savers/digital_clock",
+    "savers/fluid",
+    "savers/game_of_life",
+    "savers/lissajous",
+    "savers/matrix_rain",
+    "savers/maze",
+    "savers/pipes",
+    "savers/plasma",
+    "savers/starfield",
+    "savers/terrain",
+]
+resolver = "3"

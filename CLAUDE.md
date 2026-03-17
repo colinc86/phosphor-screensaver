@@ -1,100 +1,122 @@
 # Termsaver
 
-Terminal screensaver system for bash. Rust binary (ratatui + crossterm) activated by bash's TMOUT/ALRM idle detection.
+Terminal screensaver system for bash. Rust workspace with a host binary (ratatui + crossterm) and external plugin binaries communicating over stdin/stdout pipes.
 
 ## Quick Reference
 
 ```bash
-cargo build                                    # Build (with PAM support)
-cargo build --no-default-features              # Build without PAM
-cargo test                                     # Run all tests
-cargo clippy                                   # Lint
-cargo run                                      # Run default screensaver (starfield)
-cargo run -- run --screensaver pipes           # Run specific screensaver
-cargo run -- preview analog_clock --duration 5 # Preview for N seconds
-cargo run -- list                              # List all screensavers
-cargo run -- config                            # Interactive TUI config
-cargo run -- init bash                         # Print shell integration script
-cargo run -- print-timeout                     # Print configured timeout
+cargo build --workspace                        # Build everything
+cargo build -p termsaver --no-default-features # Build host without PAM
+cargo test --workspace                         # Run all tests
+cargo clippy --workspace                       # Lint
+cargo run -p termsaver -- run                  # Run default screensaver
+cargo run -p termsaver -- run --screensaver pipes  # Run specific screensaver
+cargo run -p termsaver -- preview plasma --duration 5
+cargo run -p termsaver -- list                 # List all discovered plugins
+cargo run -p termsaver -- config               # Interactive TUI config
+cargo run -p termsaver -- gallery              # Live gallery of all screensavers
+cargo run -p termsaver -- init bash            # Print shell integration script
 ```
 
 ## Architecture
 
 ```
-main.rs          CLI (clap) → dispatches to subcommands
-  ├─ app.rs      Main event loop: raw mode, alternate screen, FPS timing,
-  │              auto-rotate, blanking, fade, overlay, password lock
-  ├─ auth.rs     PAM-based password authentication (feature-gated)
-  ├─ config.rs   TOML config at ~/.config/termsaver/config.toml
-  │              All fields #[serde(default)], CLI overrides via merge_cli()
-  ├─ registry.rs Screensaver factory: name → Box<dyn Screensaver>
-  │              Static SCREENSAVERS array + create() match
-  │              "random" delegates to create_random() (excludes itself)
-  ├─ screensaver.rs  Screensaver trait definition + EventResponse enum
-  ├─ theme.rs    5 color palettes (default, neon, pastel, monochrome, dracula)
-  ├─ fade.rs     Fade-to/from-black transitions using random cell fill
-  ├─ overlay.rs  Clock overlay, lock message, password prompt
-  ├─ power.rs    Battery detection via /sys/class/power_supply
-  ├─ tui_config.rs  Interactive settings TUI (termsaver config)
-  └─ screensavers/
-       ├─ analog_clock.rs  Circular clock face with trig, timezone support
-       ├─ bouncing_ball.rs Physics: f64 pos/vel, VecDeque trail
-       ├─ starfield.rs     3D→2D projection, depth-based brightness
-       ├─ matrix_rain.rs   Column-based rain, katakana/ascii/binary
-       ├─ pipes.rs         Box-drawing chars, random walk
-       ├─ digital_clock.rs 5×5 block font, blinking colon
-       └─ game_of_life.rs  Conway rules, stagnation detection, interactive
+termsaver/                              # Cargo workspace
+  Cargo.toml                            # workspace members
+  crates/
+    termsaver/                          # Host binary (orchestrator)
+      src/
+        main.rs       CLI (clap) dispatches to subcommands
+        app.rs        Event loop: raw mode, FPS, auto-rotate, blanking, fade, overlay, lock
+        plugin_host.rs PluginRenderer trait + SubprocessPlugin (stdin/stdout pipes)
+        registry.rs   Filesystem plugin discovery: termsaver-saver-* binaries
+        config.rs     TOML config, screensaver configs as HashMap<String, toml::Value>
+        menu.rs       Interactive TUI config, generic config editing via --info metadata
+        gallery.rs    Live mosaic of all plugins
+        compositor.rs Split-screen dual plugin rendering
+        auth.rs       PAM password authentication (feature-gated)
+        overlay.rs    Clock overlay, lock message, password prompt
+        fade.rs       Fade-to/from-black transitions
+        theme.rs      5 color palettes
+        screensaver.rs EventResponse enum
+    termsaver-plugin/                   # SDK library for plugin authors
+      src/
+        lib.rs        ScreensaverPlugin trait
+        buffer.rs     PluginBuffer + Cell + PluginColor (replaces ratatui Frame)
+        protocol.rs   Binary wire protocol (host <-> plugin over pipes)
+        runner.rs     Plugin main loop (stdin/stdout message dispatch)
+        config_meta.rs PluginInfo + ConfigField for --info discovery
+        theme.rs      Theme palettes (same as host, for plugins)
+  savers/                               # 13 screensaver plugin binaries
+    analog_clock/  aurora/  bouncing_ball/  digital_clock/  fluid/
+    game_of_life/  lissajous/  matrix_rain/  maze/  pipes/
+    plasma/  starfield/  terrain/
 ```
+
+## Plugin Architecture
+
+All screensavers are external binaries (`termsaver-saver-*`). The host discovers them, queries metadata via `--info`, and communicates via a binary protocol over stdin/stdout pipes.
+
+**Wire protocol**: `[u8 tag] [u32 payload_len LE] [payload...]`
+- Host -> Plugin: Init, Update, Render, KeyEvent, MouseEvent, Config, Shutdown
+- Plugin -> Host: Frame (cell data), EventResponse
+
+**Discovery paths** (in order):
+1. `~/.config/termsaver/plugins/`
+2. `/usr/local/share/termsaver/plugins/`
+3. `/usr/share/termsaver/plugins/`
+4. Same directory as the host binary
 
 ## Adding a New Screensaver
 
-1. Create `src/screensavers/<name>.rs` — implement `Screensaver` trait
-2. Add config struct to `src/config.rs` with `Default` impl and `#[serde(default)]`
-3. Add field to `ScreensaverConfigs` struct in `src/config.rs`
-4. Register in `src/registry.rs`:
-   - Add entry to `SCREENSAVERS` array
-   - Add arm to `create()` match
-   - Add arm to `create_random()` match
-5. Add `pub mod <name>;` to `src/screensavers/mod.rs`
-6. Add unit tests in `#[cfg(test)]` block
+1. Create `savers/<name>/Cargo.toml` with `termsaver-plugin` dependency
+2. Create `savers/<name>/src/main.rs`:
+   - Define config struct with `#[serde(default)]` + `Default` impl
+   - Implement `ScreensaverPlugin` trait (init, update, render, info)
+   - Call `termsaver_plugin::run(MyPlugin::new(config))` in main
+3. Add to workspace members in root `Cargo.toml`
+4. Build: `cargo build --workspace`
 
-All steps are required or the screensaver won't be accessible.
+The plugin binary name must start with `termsaver-saver-`. No host code changes needed.
 
-## Screensaver Trait Contract
+## ScreensaverPlugin Trait
 
 ```rust
-fn init(&mut self, width: u16, height: u16)  // Called on start AND on resize
-fn update(&mut self, dt: Duration)           // Framerate-independent: use dt
-fn render(&self, frame: &mut Frame)          // Pure read of state, no mutation
-fn handle_event(&mut self, event) -> EventResponse  // Ignored = app exits on key
+fn info(&self) -> PluginInfo;                    // Metadata for --info discovery
+fn init(&mut self, width: u16, height: u16);     // Called on start AND resize
+fn update(&mut self, dt: Duration);              // Framerate-independent: use dt
+fn render(&self, buf: &mut PluginBuffer);        // Render into buffer, not Frame
+fn handle_key(&mut self, key: KeyInput) -> EventResponse;   // Optional
+fn handle_mouse(&mut self, mouse: MouseInput) -> EventResponse; // Optional
 ```
 
-- `update` receives real delta time — always multiply velocities by `dt.as_secs_f64()`
-- `render` takes `&self` not `&mut self` — state changes go in `update`
-- `handle_event` default returns `Ignored` (any key exits). Return `Continue` to consume keys (e.g., Game of Life uses space/r/n)
+- `render` uses `PluginBuffer` (not ratatui Frame): `buf.set(x, y, Cell { ch, fg, bg })`
+- Colors use `PluginColor::Rgb(r, g, b)` or `PluginColor::Reset`
+- `info()` must return `PluginInfo` with `config_fields` for the TUI config menu
 
 ## Features (Cargo)
 
-- `pam` (default): Enables password lock via Linux PAM. Requires `libpam.so` at link time. Build without: `cargo build --no-default-features`
+- `pam` (default): Enables password lock via Linux PAM. Build without: `cargo build -p termsaver --no-default-features`
 
 ## Testing
 
-- **Unit tests**: `#[cfg(test)]` in each module — physics, math, config parsing
-- **Snapshots**: `tests/snapshot_tests.rs` using `insta` + `ratatui::backend::TestBackend`
-- **Integration**: `tests/config_tests.rs` — TOML round-trip, error handling
-- **Accept snapshots**: rename `.snap.new` → `.snap` or install `cargo-insta`
-- **No real TTY in CI** — screensaver rendering tests use TestBackend, not a real terminal
+- **Host tests**: `cargo test -p termsaver` — config, menu, overlay, gallery layout, plugin discovery
+- **SDK tests**: `cargo test -p termsaver-plugin` — buffer, protocol, runner, theme
+- **Plugin tests**: `cargo test -p termsaver-saver-<name>` — per-screensaver logic
+- **All tests**: `cargo test --workspace`
+- **Snapshots**: `tests/snapshot_tests.rs` using `insta` + TestBackend
 
 ## Config Conventions
 
 - TOML at `~/.config/termsaver/config.toml`
-- Every config struct: `#[derive(Debug, Clone, Serialize, Deserialize)]` + `#[serde(default)]`
+- Host config structs: `#[derive(Debug, Clone, Serialize, Deserialize)]` + `#[serde(default)]`
+- Per-screensaver config in `[screensavers.<name>]` TOML section (stored as `HashMap<String, toml::Value>`)
 - Precedence: CLI flags > TOML file > built-in defaults
-- Per-screensaver config lives in `[screensavers.<name>]` TOML section
+- Plugin configs are sent as JSON on subprocess startup
 
 ## Terminal Safety
 
 - Always enter alternate screen before rendering
 - Always restore terminal on exit (raw mode off, alternate screen off, cursor shown)
-- The `app::run()` function handles setup/teardown — screensavers should NOT touch terminal state directly
-- Fade transitions run inside the alternate screen
+- The `app::run()` function handles setup/teardown — plugins should NOT touch terminal state
+- If a plugin crashes, the host restores terminal state and exits gracefully
