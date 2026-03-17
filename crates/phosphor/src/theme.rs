@@ -28,14 +28,14 @@ impl Theme {
 
     pub fn default_theme() -> Self {
         Self {
-            primary: Color::Cyan,
-            secondary: Color::Green,
-            accent: Color::Magenta,
-            dim: Color::DarkGray,
-            bright: Color::White,
-            background: Color::Black,
-            text: Color::White,
-            highlight: Color::Yellow,
+            primary: Color::Rgb(200, 145, 30),
+            secondary: Color::Rgb(160, 110, 20),
+            accent: Color::Rgb(255, 180, 40),
+            dim: Color::Rgb(80, 60, 15),
+            bright: Color::Rgb(255, 220, 140),
+            background: Color::Rgb(10, 8, 5),
+            text: Color::Rgb(220, 175, 80),
+            highlight: Color::Rgb(255, 200, 60),
         }
     }
 

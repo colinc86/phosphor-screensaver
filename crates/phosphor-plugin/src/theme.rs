@@ -29,14 +29,14 @@ impl ThemeColors {
 
     pub fn default_theme() -> Self {
         Self {
-            primary: PluginColor::Rgb(0, 255, 255),     // Cyan
-            secondary: PluginColor::Rgb(0, 128, 0),     // Green
-            accent: PluginColor::Rgb(255, 0, 255),      // Magenta
-            dim: PluginColor::Rgb(128, 128, 128),       // DarkGray
-            bright: PluginColor::Rgb(255, 255, 255),    // White
-            background: PluginColor::Rgb(0, 0, 0),      // Black
-            text: PluginColor::Rgb(255, 255, 255),      // White
-            highlight: PluginColor::Rgb(255, 255, 0),   // Yellow
+            primary: PluginColor::Rgb(200, 145, 30),
+            secondary: PluginColor::Rgb(160, 110, 20),
+            accent: PluginColor::Rgb(255, 180, 40),
+            dim: PluginColor::Rgb(80, 60, 15),
+            bright: PluginColor::Rgb(255, 220, 140),
+            background: PluginColor::Rgb(10, 8, 5),
+            text: PluginColor::Rgb(220, 175, 80),
+            highlight: PluginColor::Rgb(255, 200, 60),
         }
     }
 

@@ -1,5 +1,9 @@
 # phosphor
 
+<p align="center">
+  <img src="images/banner.png" alt="phosphor" />
+</p>
+
 **Terminal screensavers, the way they were meant to be.**
 
 Phosphor is a screensaver system for your terminal. It watches for idle time, fades to black, and runs one of 13 built-in screensavers — or your own custom one. Named after CRT phosphor burn-in, the original reason screensavers were invented.
