@@ -23,7 +23,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use config::Config;
 
 #[derive(Parser)]
-#[command(name = "termsaver", about = "Terminal screensaver", version)]
+#[command(name = "phosphor", about = "Terminal screensaver", version)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -206,42 +206,42 @@ fn print_shell_init(shell: &ShellType, config: &Config) {
     match shell {
         ShellType::Bash => {
             print!(
-                r#"# termsaver shell integration for bash
-# Add to your .bashrc: eval "$(termsaver init bash)"
+                r#"# phosphor shell integration for bash
+# Add to your .bashrc: eval "$(phosphor init bash)"
 
 # Guard: only run in interactive shells
 [[ $- != *i* ]] && return
 
 # Guard: don't activate inside nested shells
-[[ -n "$TERMSAVER_ACTIVE" ]] && return
+[[ -n "$PHOSPHOR_ACTIVE" ]] && return
 
 # Kill existing watcher from previous source
-[[ -n "$_TS_WATCHER_PID" ]] && kill "$_TS_WATCHER_PID" 2>/dev/null
+[[ -n "$_PH_WATCHER_PID" ]] && kill "$_PH_WATCHER_PID" 2>/dev/null
 
 # Heartbeat file — mtime tracks when the user last ran a command
-_TS_HEARTBEAT="/tmp/.ts_heartbeat_$$"
-: > "$_TS_HEARTBEAT"
+_PH_HEARTBEAT="/tmp/.ts_heartbeat_$$"
+: > "$_PH_HEARTBEAT"
 
 # Start background watcher (monitors heartbeat, takes over terminal when idle)
-command termsaver watch --shell-pid $$ --timeout {timeout} &
-_TS_WATCHER_PID=$!
-disown "$_TS_WATCHER_PID" 2>/dev/null
+command phosphor watch --shell-pid $$ --timeout {timeout} &
+_PH_WATCHER_PID=$!
+disown "$_PH_WATCHER_PID" 2>/dev/null
 
 # Update heartbeat on each prompt
-PROMPT_COMMAND=": > $_TS_HEARTBEAT${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
+PROMPT_COMMAND=": > $_PH_HEARTBEAT${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
 "#
             );
         }
         ShellType::Zsh => {
             print!(
-                r#"# termsaver shell integration for zsh
-# Add to your .zshrc: eval "$(termsaver init zsh)"
+                r#"# phosphor shell integration for zsh
+# Add to your .zshrc: eval "$(phosphor init zsh)"
 
 # Guard: only run in interactive shells
 [[ -o interactive ]] || return
 
 # Guard: don't activate inside nested shells if already active
-[[ -n "$TERMSAVER_ACTIVE" ]] && return
+[[ -n "$PHOSPHOR_ACTIVE" ]] && return
 
 # Set TMOUT to trigger ALRM after idle period
 TMOUT={timeout}
@@ -249,13 +249,13 @@ TMOUT={timeout}
 # Trap ALRM signal
 TRAPALRM() {{
     [[ ! -t 0 ]] && return
-    [[ -n "$TERMSAVER_ACTIVE" ]] && return
+    [[ -n "$PHOSPHOR_ACTIVE" ]] && return
 
     unset TMOUT
 
-    export TERMSAVER_ACTIVE=1
-    termsaver run
-    unset TERMSAVER_ACTIVE
+    export PHOSPHOR_ACTIVE=1
+    phosphor run
+    unset PHOSPHOR_ACTIVE
 
     TMOUT={timeout}
 }}

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
     ScreensaverPlugin,
 };
@@ -236,7 +236,7 @@ impl ScreensaverPlugin for Plasma {
 
 fn main() {
     let config = PlasmaConfig::default();
-    termsaver_plugin::run(Plasma::new(config));
+    phosphor_plugin::run(Plasma::new(config));
 }
 
 #[cfg(test)]

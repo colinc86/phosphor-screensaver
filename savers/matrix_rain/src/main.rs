@@ -2,11 +2,11 @@ use std::time::Duration;
 
 use rand::Rng;
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, EventResponse, FieldKind, KeyInput, PluginBuffer, PluginColor,
     PluginInfo, ScreensaverPlugin,
 };
-use termsaver_plugin::protocol::KeyCode;
+use phosphor_plugin::protocol::KeyCode;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -422,7 +422,7 @@ impl ScreensaverPlugin for MatrixRain {
 
 fn main() {
     let config = MatrixRainConfig::default();
-    termsaver_plugin::run(MatrixRain::new(config));
+    phosphor_plugin::run(MatrixRain::new(config));
 }
 
 #[cfg(test)]

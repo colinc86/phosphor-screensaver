@@ -31,7 +31,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-heading "Termsaver Installer"
+heading "Phosphor Installer"
 
 # --- Preflight checks ---
 
@@ -57,8 +57,8 @@ heading "Building workspace..."
 
 if [[ "$NO_PAM" == true ]]; then
     # Build host without PAM, then build all savers
-    cargo build --release -p termsaver --no-default-features
-    cargo build --release --workspace --exclude termsaver
+    cargo build --release -p phosphor --no-default-features
+    cargo build --release --workspace --exclude phosphor
 else
     cargo build --workspace --release
 fi
@@ -72,7 +72,7 @@ heading "Installing binaries to ${PREFIX}..."
 BINARIES=()
 while IFS= read -r bin; do
     BINARIES+=("$bin")
-done < <(find target/release -maxdepth 1 \( -name 'termsaver' -o -name 'termsaver-saver-*' \) -type f -executable | grep -v '\.d$')
+done < <(find target/release -maxdepth 1 \( -name 'phosphor' -o -name 'phosphor-saver-*' \) -type f -executable | grep -v '\.d$')
 
 if [[ ${#BINARIES[@]} -eq 0 ]]; then
     error "No binaries found in target/release/"
@@ -100,8 +100,8 @@ if [[ "$OS" == "Linux" ]]; then
         CURRENT=$(sysctl -n dev.tty.legacy_tiocsti)
         if [[ "$CURRENT" == "0" ]]; then
             $SUDO sysctl -w dev.tty.legacy_tiocsti=1 >/dev/null
-            echo "# Enable TIOCSTI for termsaver bash idle detection" | $SUDO tee /etc/sysctl.d/99-termsaver.conf >/dev/null
-            echo "dev.tty.legacy_tiocsti = 1" | $SUDO tee -a /etc/sysctl.d/99-termsaver.conf >/dev/null
+            echo "# Enable TIOCSTI for phosphor bash idle detection" | $SUDO tee /etc/sysctl.d/99-phosphor.conf >/dev/null
+            echo "dev.tty.legacy_tiocsti = 1" | $SUDO tee -a /etc/sysctl.d/99-phosphor.conf >/dev/null
             info "Enabled TIOCSTI (dev.tty.legacy_tiocsti=1)"
         else
             info "TIOCSTI already enabled"
@@ -116,8 +116,8 @@ fi
 heading "Setting up shell integration..."
 
 SHELL_NAME="$(basename "$SHELL")"
-GUARD_START="# >>> termsaver >>>"
-GUARD_END="# <<< termsaver <<<"
+GUARD_START="# >>> phosphor >>>"
+GUARD_END="# <<< phosphor <<<"
 
 install_shell_integration() {
     local rc_file="$1"
@@ -135,7 +135,7 @@ install_shell_integration() {
     {
         echo ""
         echo "$GUARD_START"
-        echo "eval \"\$(termsaver init ${shell_type})\""
+        echo "eval \"\$(phosphor init ${shell_type})\""
         echo "$GUARD_END"
     } >> "$rc_file"
 
@@ -145,7 +145,7 @@ install_shell_integration() {
 case "$SHELL_NAME" in
     bash) install_shell_integration "$HOME/.bashrc" "bash" ;;
     zsh)  install_shell_integration "$HOME/.zshrc" "zsh" ;;
-    *)    warn "Unsupported shell: $SHELL_NAME. Add manually: eval \"\$(termsaver init bash)\"" ;;
+    *)    warn "Unsupported shell: $SHELL_NAME. Add manually: eval \"\$(phosphor init bash)\"" ;;
 esac
 
 # --- Done ---

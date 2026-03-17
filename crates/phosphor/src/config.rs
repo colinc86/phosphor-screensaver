@@ -227,7 +227,7 @@ impl Default for CompositorConfig {
 }
 
 impl Config {
-    /// Load config from the default path (~/.config/termsaver/config.toml).
+    /// Load config from the default path (~/.config/phosphor/config.toml).
     /// Returns default config if the file doesn't exist.
     pub fn load() -> Self {
         Self::config_path()
@@ -262,7 +262,7 @@ impl Config {
 
     /// Return the default config file path.
     pub fn config_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("termsaver").join("config.toml"))
+        dirs::config_dir().map(|d| d.join("phosphor").join("config.toml"))
     }
 
     /// Get the screensaver config as JSON (for sending to subprocess plugins).

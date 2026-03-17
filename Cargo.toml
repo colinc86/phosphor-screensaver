@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "crates/termsaver",
-    "crates/termsaver-plugin",
+    "crates/phosphor",
+    "crates/phosphor-plugin",
     "savers/analog_clock",
     "savers/aurora",
     "savers/bouncing_ball",

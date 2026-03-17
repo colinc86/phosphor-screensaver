@@ -2,11 +2,11 @@ use std::time::Duration;
 
 use rand::Rng;
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, EventResponse, FieldKind, KeyInput, MouseInput,
     PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
-use termsaver_plugin::protocol::{KeyCode, MouseKind};
+use phosphor_plugin::protocol::{KeyCode, MouseKind};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -582,7 +582,7 @@ impl ScreensaverPlugin for Fluid {
 
 fn main() {
     let config = FluidConfig::default();
-    termsaver_plugin::run(Fluid::new(config));
+    phosphor_plugin::run(Fluid::new(config));
 }
 
 #[cfg(test)]

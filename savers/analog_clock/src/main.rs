@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 use std::time::Duration;
 
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
     ScreensaverPlugin,
 };
@@ -293,7 +293,7 @@ impl ScreensaverPlugin for AnalogClock {
 
 fn main() {
     let config = AnalogClockConfig::default();
-    termsaver_plugin::run(AnalogClock::new(config));
+    phosphor_plugin::run(AnalogClock::new(config));
 }
 
 #[cfg(test)]

@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-heading "Termsaver Uninstaller"
+heading "Phosphor Uninstaller"
 
 SUDO=""
 if [[ ! -w "$PREFIX" ]]; then
@@ -42,7 +42,7 @@ OS="$(uname -s)"
 heading "Removing binaries..."
 
 REMOVED=0
-for bin in "$PREFIX"/termsaver "$PREFIX"/termsaver-saver-*; do
+for bin in "$PREFIX"/phosphor "$PREFIX"/phosphor-saver-*; do
     if [[ -f "$bin" ]]; then
         $SUDO rm "$bin"
         REMOVED=$((REMOVED + 1))
@@ -52,7 +52,7 @@ done
 if [[ $REMOVED -gt 0 ]]; then
     info "Removed ${REMOVED} binaries from ${PREFIX}/"
 else
-    warn "No termsaver binaries found in ${PREFIX}/"
+    warn "No phosphor binaries found in ${PREFIX}/"
 fi
 
 # --- Remove sysctl (Linux only) ---
@@ -60,7 +60,7 @@ fi
 if [[ "$OS" == "Linux" ]]; then
     heading "Removing sysctl configuration..."
 
-    SYSCTL_CONF="/etc/sysctl.d/99-termsaver.conf"
+    SYSCTL_CONF="/etc/sysctl.d/99-phosphor.conf"
     if [[ -f "$SYSCTL_CONF" ]]; then
         $SUDO rm -f "$SYSCTL_CONF"
         if sysctl dev.tty.legacy_tiocsti &>/dev/null; then
@@ -76,8 +76,8 @@ fi
 
 heading "Removing shell integration..."
 
-GUARD_START="# >>> termsaver >>>"
-GUARD_END="# <<< termsaver <<<"
+GUARD_START="# >>> phosphor >>>"
+GUARD_END="# <<< phosphor <<<"
 
 remove_shell_integration() {
     local rc_file="$1"
@@ -104,8 +104,8 @@ remove_shell_integration "$HOME/.zshrc"
 
 heading "Configuration and data..."
 
-CONFIG_DIR="$HOME/.config/termsaver"
-DATA_DIR="$HOME/.local/share/termsaver"
+CONFIG_DIR="$HOME/.config/phosphor"
+DATA_DIR="$HOME/.local/share/phosphor"
 
 HAS_DATA=false
 [[ -d "$CONFIG_DIR" ]] && HAS_DATA=true

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use rand::Rng;
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
 
@@ -329,7 +329,7 @@ impl ScreensaverPlugin for Lissajous {
 
 fn main() {
     let config = LissajousConfig::default();
-    termsaver_plugin::run(Lissajous::new(config));
+    phosphor_plugin::run(Lissajous::new(config));
 }
 
 #[cfg(test)]

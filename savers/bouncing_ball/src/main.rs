@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use rand::Rng;
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
 
@@ -458,7 +458,7 @@ impl ScreensaverPlugin for BouncingBall {
 
 fn main() {
     let config = BouncingBallConfig::default();
-    termsaver_plugin::run(BouncingBall::new(config));
+    phosphor_plugin::run(BouncingBall::new(config));
 }
 
 // Accessors for tests

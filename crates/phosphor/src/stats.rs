@@ -38,7 +38,7 @@ impl Stats {
     }
 
     pub fn stats_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("termsaver").join("stats.toml"))
+        dirs::config_dir().map(|d| d.join("phosphor").join("stats.toml"))
     }
 
     /// Record a completed session
@@ -85,7 +85,7 @@ impl Stats {
     /// Format stats for display
     pub fn format_summary(&self) -> String {
         let mut lines = Vec::new();
-        lines.push("Termsaver Usage Statistics".to_string());
+        lines.push("Phosphor Usage Statistics".to_string());
         lines.push("=".repeat(40));
         lines.push(String::new());
         lines.push(format!("Total sessions: {}", self.total_sessions));

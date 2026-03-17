@@ -29,7 +29,7 @@ pub fn run(mut plugin: impl ScreensaverPlugin) {
 
     if let Err(e) = message_loop(&mut plugin, &mut buf, &mut reader, &mut writer) {
         // Plugin crashed — write error to stderr (host will see process exit)
-        eprintln!("termsaver plugin error: {e}");
+        eprintln!("phosphor plugin error: {e}");
     }
 }
 

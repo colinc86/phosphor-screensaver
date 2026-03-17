@@ -7,7 +7,7 @@ use crate::config::Config;
 ///
 /// Monitors a heartbeat file (touched by PROMPT_COMMAND) to detect idle time.
 /// When the shell has been idle for `timeout` seconds and is at the prompt,
-/// injects `termsaver run` into the terminal input via TIOCSTI so bash
+/// injects `phosphor run` into the terminal input via TIOCSTI so bash
 /// executes it as a normal foreground command. No process group manipulation.
 pub fn run(shell_pid: u32, timeout: u64, _config: &Config) -> io::Result<()> {
     use std::os::fd::AsRawFd;
@@ -51,15 +51,15 @@ pub fn run(shell_pid: u32, timeout: u64, _config: &Config) -> io::Result<()> {
             continue;
         }
 
-        // Inject "termsaver run" into terminal input
+        // Inject "phosphor run" into terminal input
         // Leading space prevents bash from adding it to history
-        if inject_input(tty_fd, b" termsaver run\n").is_err() {
+        if inject_input(tty_fd, b" phosphor run\n").is_err() {
             // TIOCSTI not available — exit gracefully
             #[cfg(target_os = "linux")]
-            eprintln!("termsaver: TIOCSTI ioctl not available. \
+            eprintln!("phosphor: TIOCSTI ioctl not available. \
                 Enable with: sudo sysctl dev.tty.legacy_tiocsti=1");
             #[cfg(not(target_os = "linux"))]
-            eprintln!("termsaver: TIOCSTI ioctl not available.");
+            eprintln!("phosphor: TIOCSTI ioctl not available.");
             break;
         }
 

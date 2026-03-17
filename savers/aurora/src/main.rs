@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use rand::Rng;
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
     ScreensaverPlugin,
 };
@@ -259,7 +259,7 @@ impl ScreensaverPlugin for Aurora {
 
 fn main() {
     let config = AuroraConfig::default();
-    termsaver_plugin::run(Aurora::new(config));
+    phosphor_plugin::run(Aurora::new(config));
 }
 
 #[cfg(test)]

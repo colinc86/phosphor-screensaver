@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use rand::Rng;
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
     ScreensaverPlugin,
 };
@@ -483,7 +483,7 @@ impl ScreensaverPlugin for Pipes {
 
 fn main() {
     let config = PipesConfig::default();
-    termsaver_plugin::run(Pipes::new(config));
+    phosphor_plugin::run(Pipes::new(config));
 }
 
 #[cfg(test)]

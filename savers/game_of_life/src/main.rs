@@ -4,11 +4,11 @@ use std::time::Duration;
 
 use rand::Rng;
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, EventResponse, FieldKind, KeyInput, PluginBuffer, PluginColor,
     PluginInfo, ScreensaverPlugin,
 };
-use termsaver_plugin::protocol::KeyCode;
+use phosphor_plugin::protocol::KeyCode;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -331,7 +331,7 @@ impl ScreensaverPlugin for GameOfLife {
 
 fn main() {
     let config = GameOfLifeConfig::default();
-    termsaver_plugin::run(GameOfLife::new(config));
+    phosphor_plugin::run(GameOfLife::new(config));
 }
 
 #[cfg(test)]

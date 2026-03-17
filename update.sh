@@ -15,12 +15,12 @@ heading() { echo -e "\n${BOLD}$*${NC}"; }
 
 PREFIX="/usr/local/bin"
 
-heading "Termsaver Updater"
+heading "Phosphor Updater"
 
 # --- Preflight ---
 
 if [[ ! -f "Cargo.toml" ]] || ! grep -q '\[workspace\]' Cargo.toml; then
-    error "Not in the termsaver workspace root. Run from the project directory."
+    error "Not in the phosphor workspace root. Run from the project directory."
     exit 1
 fi
 
@@ -37,7 +37,7 @@ heading "Installing binaries to ${PREFIX}..."
 BINARIES=()
 while IFS= read -r bin; do
     BINARIES+=("$bin")
-done < <(find target/release -maxdepth 1 \( -name 'termsaver' -o -name 'termsaver-saver-*' \) -type f -executable | grep -v '\.d$')
+done < <(find target/release -maxdepth 1 \( -name 'phosphor' -o -name 'phosphor-saver-*' \) -type f -executable | grep -v '\.d$')
 
 if [[ ${#BINARIES[@]} -eq 0 ]]; then
     error "No binaries found in target/release/"

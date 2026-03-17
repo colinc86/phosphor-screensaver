@@ -9,8 +9,8 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use termsaver_plugin::buffer::{PluginBuffer, PluginColor};
-use termsaver_plugin::protocol::{
+use phosphor_plugin::buffer::{PluginBuffer, PluginColor};
+use phosphor_plugin::protocol::{
     self as proto, HostMessage, KeyCode as ProtoKeyCode, KeyInput, MouseInput,
     MouseKind as ProtoMouseKind, PluginMessage,
 };

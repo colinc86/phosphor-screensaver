@@ -10,7 +10,7 @@ use crate::plugin_host::{PluginRenderer, SubprocessPlugin};
 pub struct DiscoveredPlugin {
     pub name: String,
     pub path: PathBuf,
-    pub info: termsaver_plugin::PluginInfo,
+    pub info: phosphor_plugin::PluginInfo,
 }
 
 /// Cached plugin discovery (expensive: runs --info on each binary).
@@ -55,7 +55,7 @@ pub fn create_random_plugin(config: &Config) -> Box<dyn PluginRenderer> {
     use rand::Rng;
     let all = plugins();
     if all.is_empty() {
-        panic!("No screensaver plugins found. Ensure termsaver-saver-* binaries are in the same directory as termsaver.");
+        panic!("No screensaver plugins found. Ensure phosphor-saver-* binaries are in the same directory as phosphor.");
     }
     let mut rng = rand::rng();
     let idx = rng.random_range(0..all.len());
@@ -87,7 +87,7 @@ fn discover_plugins() -> Vec<DiscoveredPlugin> {
             for entry in entries.flatten() {
                 let path = entry.path();
                 let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if fname.starts_with("termsaver-saver-") && is_executable(&path) {
+                if fname.starts_with("phosphor-saver-") && is_executable(&path) {
                     if let Some(info) = query_plugin_info(&path) {
                         if seen.insert(info.name.clone()) {
                             plugins.push(DiscoveredPlugin {
@@ -111,12 +111,12 @@ fn plugin_search_paths() -> Vec<PathBuf> {
 
     // User plugin dir
     if let Some(config_dir) = dirs::config_dir() {
-        paths.push(config_dir.join("termsaver").join("plugins"));
+        paths.push(config_dir.join("phosphor").join("plugins"));
     }
 
     // System dirs
-    paths.push(PathBuf::from("/usr/local/share/termsaver/plugins"));
-    paths.push(PathBuf::from("/usr/share/termsaver/plugins"));
+    paths.push(PathBuf::from("/usr/local/share/phosphor/plugins"));
+    paths.push(PathBuf::from("/usr/share/phosphor/plugins"));
 
     // Same directory as host binary
     if let Ok(exe) = std::env::current_exe() {
@@ -136,7 +136,7 @@ fn is_executable(path: &PathBuf) -> bool {
             .unwrap_or(false)
 }
 
-fn query_plugin_info(path: &PathBuf) -> Option<termsaver_plugin::PluginInfo> {
+fn query_plugin_info(path: &PathBuf) -> Option<phosphor_plugin::PluginInfo> {
     let output = Command::new(path)
         .arg("--info")
         .output()

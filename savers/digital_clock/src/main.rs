@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde::Deserialize;
-use termsaver_plugin::{
+use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
     ScreensaverPlugin,
 };
@@ -477,7 +477,7 @@ impl ScreensaverPlugin for DigitalClock {
 
 fn main() {
     let config = DigitalClockConfig::default();
-    termsaver_plugin::run(DigitalClock::new(config));
+    phosphor_plugin::run(DigitalClock::new(config));
 }
 
 #[cfg(test)]

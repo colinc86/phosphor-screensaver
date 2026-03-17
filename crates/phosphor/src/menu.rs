@@ -275,12 +275,12 @@ impl MenuUI {
 
         plugin.info.config_fields.iter().map(|f| {
             let kind = match f.kind {
-                termsaver_plugin::FieldKind::Bool => EditKind::Bool,
-                termsaver_plugin::FieldKind::U32 => EditKind::U32,
-                termsaver_plugin::FieldKind::U64 => EditKind::U64,
-                termsaver_plugin::FieldKind::USize => EditKind::USize,
-                termsaver_plugin::FieldKind::F64 => EditKind::F64,
-                termsaver_plugin::FieldKind::Text => EditKind::Text,
+                phosphor_plugin::FieldKind::Bool => EditKind::Bool,
+                phosphor_plugin::FieldKind::U32 => EditKind::U32,
+                phosphor_plugin::FieldKind::U64 => EditKind::U64,
+                phosphor_plugin::FieldKind::USize => EditKind::USize,
+                phosphor_plugin::FieldKind::F64 => EditKind::F64,
+                phosphor_plugin::FieldKind::Text => EditKind::Text,
             };
             let value = saver_config
                 .and_then(|v| v.get(&f.key))
@@ -312,23 +312,23 @@ impl MenuUI {
         };
 
         match field.kind {
-            termsaver_plugin::FieldKind::Bool => {
+            phosphor_plugin::FieldKind::Bool => {
                 let current = toml_table.get(&field.key)
                     .and_then(|v| v.as_bool())
                     .unwrap_or_else(|| field.default.parse().unwrap_or(false));
                 toml_table.insert(field.key.clone(), toml::Value::Boolean(!current));
             }
-            termsaver_plugin::FieldKind::U32 | termsaver_plugin::FieldKind::U64 | termsaver_plugin::FieldKind::USize => {
+            phosphor_plugin::FieldKind::U32 | phosphor_plugin::FieldKind::U64 | phosphor_plugin::FieldKind::USize => {
                 if let Ok(v) = value.parse::<i64>() {
                     toml_table.insert(field.key.clone(), toml::Value::Integer(v));
                 }
             }
-            termsaver_plugin::FieldKind::F64 => {
+            phosphor_plugin::FieldKind::F64 => {
                 if let Ok(v) = value.parse::<f64>() {
                     toml_table.insert(field.key.clone(), toml::Value::Float(v));
                 }
             }
-            termsaver_plugin::FieldKind::Text => {
+            phosphor_plugin::FieldKind::Text => {
                 toml_table.insert(field.key.clone(), toml::Value::String(value.to_string()));
             }
         }
@@ -661,7 +661,7 @@ fn render_tab_bar(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
         .constraints([Constraint::Length(1), Constraint::Length(2)])
         .split(area);
 
-    let title = Paragraph::new("  Termsaver")
+    let title = Paragraph::new("  Phosphor")
         .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
     frame.render_widget(title, chunks[0]);
 
@@ -852,21 +852,21 @@ fn render_about(frame: &mut ratatui::Frame, area: Rect) {
 
     let lines = vec![
         Line::from(""),
-        Line::from(Span::styled("  Termsaver", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("  Phosphor", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
         Line::from(format!("  Version: {version}")),
         Line::from(""),
         Line::from(format!("  Config: {config_path}")),
         Line::from(""),
         Line::from("  Shell integration:"),
-        Line::from(Span::styled("    eval \"$(termsaver init bash)\"", Style::default().fg(Color::Green))),
+        Line::from(Span::styled("    eval \"$(phosphor init bash)\"", Style::default().fg(Color::Green))),
         Line::from(""),
         Line::from("  Commands:"),
-        Line::from("    termsaver              Open this menu"),
-        Line::from("    termsaver run          Launch screensaver directly"),
-        Line::from("    termsaver list         List all screensavers"),
-        Line::from("    termsaver preview <n>  Preview a screensaver"),
-        Line::from("    termsaver config       Open this menu"),
-        Line::from("    termsaver gallery      Live split-screen gallery"),
+        Line::from("    phosphor              Open this menu"),
+        Line::from("    phosphor run          Launch screensaver directly"),
+        Line::from("    phosphor list         List all screensavers"),
+        Line::from("    phosphor preview <n>  Preview a screensaver"),
+        Line::from("    phosphor config       Open this menu"),
+        Line::from("    phosphor gallery      Live split-screen gallery"),
     ];
 
     let para = Paragraph::new(lines)
@@ -950,7 +950,7 @@ mod tests {
             let field = &plugins[idx].info.config_fields[0];
             // Apply a value
             match field.kind {
-                termsaver_plugin::FieldKind::F64 => {
+                phosphor_plugin::FieldKind::F64 => {
                     ui.apply_saver_config(0, "42.0");
                     let val = ui.config.screensavers.get(&plugins[idx].name)
                         .and_then(|v| v.get(&field.key))
