@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Style};
 use ratatui::Frame;
 
 use crate::config::OverlayConfig;
@@ -28,8 +28,7 @@ pub fn render_clock(frame: &mut Frame, config: &OverlayConfig) {
                 cell.set_char(ch);
                 cell.set_style(
                     Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::DIM),
+                        .fg(Color::Rgb(100, 100, 100)),
                 );
             });
         }
