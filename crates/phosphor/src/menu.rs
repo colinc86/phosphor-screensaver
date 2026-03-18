@@ -116,7 +116,8 @@ impl MenuUI {
 
     fn setting_entries(&self) -> Vec<SettingEntry> {
         let c = &self.config;
-        let saver_names: Vec<String> = registry::plugins().iter().map(|p| p.name.clone()).collect();
+        let mut saver_names: Vec<String> = registry::plugins().iter().map(|p| p.name.clone()).collect();
+        saver_names.push("random".into());
         let theme_names: Vec<String> = Theme::available().iter().map(|s| s.to_string()).collect();
         let positions = vec!["top-left".into(), "top-right".into(), "bottom-left".into(), "bottom-right".into()];
         let transitions = vec!["dissolve".into(), "slide".into(), "melt".into(), "none".into()];
@@ -133,9 +134,15 @@ impl MenuUI {
 
             SettingEntry::Header("Clock Overlay"),
             SettingEntry::Setting { label: "Enabled", value: c.overlay.clock.enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Position", value: c.overlay.clock.position.clone(), kind: EditKind::Text, choices: Some(positions) },
+            SettingEntry::Setting { label: "Position", value: c.overlay.clock.position.clone(), kind: EditKind::Text, choices: Some(positions.clone()) },
             SettingEntry::Setting { label: "Format", value: c.overlay.clock.format.clone(), kind: EditKind::Text, choices: None },
             SettingEntry::Setting { label: "Show Seconds", value: c.overlay.clock.show_seconds.to_string(), kind: EditKind::Bool, choices: None },
+
+            SettingEntry::Header("Info Overlay"),
+            SettingEntry::Setting { label: "Enabled", value: c.overlay.info.enabled.to_string(), kind: EditKind::Bool, choices: None },
+            SettingEntry::Setting { label: "Show CWD", value: c.overlay.info.show_cwd.to_string(), kind: EditKind::Bool, choices: None },
+            SettingEntry::Setting { label: "Show Hostname", value: c.overlay.info.show_hostname.to_string(), kind: EditKind::Bool, choices: None },
+            SettingEntry::Setting { label: "Position", value: c.overlay.info.position.clone(), kind: EditKind::Text, choices: Some(positions.clone()) },
 
             SettingEntry::Header("Lock"),
             SettingEntry::Setting { label: "Enabled", value: c.overlay.lock.enabled.to_string(), kind: EditKind::Bool, choices: None },
@@ -186,30 +193,35 @@ impl MenuUI {
             8 => c.overlay.clock.position = value.to_string(),
             9 => c.overlay.clock.format = value.to_string(),
             10 => c.overlay.clock.show_seconds = !c.overlay.clock.show_seconds,
+            // Info Overlay
+            11 => c.overlay.info.enabled = !c.overlay.info.enabled,
+            12 => c.overlay.info.show_cwd = !c.overlay.info.show_cwd,
+            13 => c.overlay.info.show_hostname = !c.overlay.info.show_hostname,
+            14 => c.overlay.info.position = value.to_string(),
             // Lock
-            11 => c.overlay.lock.enabled = !c.overlay.lock.enabled,
-            12 => c.overlay.lock.message = value.to_string(),
-            13 => c.overlay.lock.password_required = !c.overlay.lock.password_required,
+            15 => c.overlay.lock.enabled = !c.overlay.lock.enabled,
+            16 => c.overlay.lock.message = value.to_string(),
+            17 => c.overlay.lock.password_required = !c.overlay.lock.password_required,
             // Screen Blanking
-            14 => c.blanking.enabled = !c.blanking.enabled,
-            15 => { if let Ok(v) = value.parse() { c.blanking.delay_secs = v; } }
+            18 => c.blanking.enabled = !c.blanking.enabled,
+            19 => { if let Ok(v) = value.parse() { c.blanking.delay_secs = v; } }
             // Auto-Rotate
-            16 => c.rotate.enabled = !c.rotate.enabled,
-            17 => { if let Ok(v) = value.parse() { c.rotate.interval_secs = v; } }
-            18 => c.rotate.transition_style = value.to_string(),
-            19 => { if let Ok(v) = value.parse() { c.rotate.transition_duration_ms = v; } }
+            20 => c.rotate.enabled = !c.rotate.enabled,
+            21 => { if let Ok(v) = value.parse() { c.rotate.interval_secs = v; } }
+            22 => c.rotate.transition_style = value.to_string(),
+            23 => { if let Ok(v) = value.parse() { c.rotate.transition_duration_ms = v; } }
             // Power
-            20 => c.power.battery_aware = !c.power.battery_aware,
-            21 => { if let Ok(v) = value.parse() { c.power.battery_fps = v; } }
-            22 => { if let Ok(v) = value.parse() { c.power.ac_fps = v; } }
+            24 => c.power.battery_aware = !c.power.battery_aware,
+            25 => { if let Ok(v) = value.parse() { c.power.battery_fps = v; } }
+            26 => { if let Ok(v) = value.parse() { c.power.ac_fps = v; } }
             // Schedule
-            23 => c.schedule.enabled = !c.schedule.enabled,
-            24 => c.schedule.morning = value.to_string(),
-            25 => c.schedule.afternoon = value.to_string(),
-            26 => c.schedule.evening = value.to_string(),
-            27 => c.schedule.night = value.to_string(),
+            27 => c.schedule.enabled = !c.schedule.enabled,
+            28 => c.schedule.morning = value.to_string(),
+            29 => c.schedule.afternoon = value.to_string(),
+            30 => c.schedule.evening = value.to_string(),
+            31 => c.schedule.night = value.to_string(),
             // Theme
-            28 => c.theme.name = value.to_string(),
+            32 => c.theme.name = value.to_string(),
             _ => {}
         }
     }
@@ -796,6 +808,8 @@ fn render_help(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
     lines.push(Line::from(""));
     lines.push(Line::from("    q/Esc        Exit screensaver"));
     lines.push(Line::from("    m            Open this menu (during screensaver)"));
+    lines.push(Line::from("    +/=          Next screensaver"));
+    lines.push(Line::from("    -            Previous screensaver"));
     lines.push(Line::from("    Tab/BackTab  Switch menu tabs"));
     lines.push(Line::from("    ↑/↓ or j/k   Navigate lists"));
     lines.push(Line::from("    Enter        Select / edit / launch"));
@@ -831,6 +845,7 @@ fn render_help(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
     lines.push(Line::from("    Auto-Rotate     Cycle through screensavers on a timer"));
     lines.push(Line::from("    Transitions     Dissolve, slide, or melt between screensavers"));
     lines.push(Line::from("    Clock Overlay   Show time over any screensaver"));
+    lines.push(Line::from("    Info Overlay    Show CWD/hostname over any screensaver"));
     lines.push(Line::from("    Screen Lock     Require password to exit (PAM)"));
     lines.push(Line::from("    Screen Blank    Go dark after inactivity"));
     lines.push(Line::from("    Battery Aware   Reduce FPS on battery power"));
@@ -904,17 +919,17 @@ mod tests {
         let ui = MenuUI::new(Config::default(), MenuContext::Standalone);
         let entries = ui.setting_entries();
         let setting_count = entries.iter().filter(|e| matches!(e, SettingEntry::Setting { .. })).count();
-        assert_eq!(setting_count, 29);
+        assert_eq!(setting_count, 33);
         let header_count = entries.iter().filter(|e| matches!(e, SettingEntry::Header(_))).count();
-        assert_eq!(header_count, 8);
+        assert_eq!(header_count, 9);
     }
 
     #[test]
     fn apply_setting_round_trip() {
         let mut ui = MenuUI::new(Config::default(), MenuContext::Standalone);
-        assert_eq!(ui.config.general.fps, 30);
-        ui.apply_setting(1, "60");
         assert_eq!(ui.config.general.fps, 60);
+        ui.apply_setting(1, "120");
+        assert_eq!(ui.config.general.fps, 120);
     }
 
     #[test]

@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use crossterm::execute;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    BeginSynchronizedUpdate, EndSynchronizedUpdate, EnterAlternateScreen, LeaveAlternateScreen,
+    disable_raw_mode, enable_raw_mode,
 };
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -31,6 +32,23 @@ fn create_plugin(name: &str, config: &Config) -> Box<dyn PluginRenderer> {
     })
 }
 
+/// Guard that restores the terminal on drop, even if the function exits
+/// via an error or panic.  Declared *after* `saver` so it is dropped
+/// *before* the SubprocessPlugin (Rust drops in reverse declaration order),
+/// ensuring the user gets their terminal back immediately.
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(
+            io::stdout(),
+            LeaveAlternateScreen,
+            crossterm::cursor::Show
+        );
+    }
+}
+
 /// Run the screensaver application.
 pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()> {
     // Select screensaver, checking schedule first
@@ -46,6 +64,9 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, crossterm::cursor::Hide)?;
+    // Terminal cleanup guard — dropped before `saver`, so the terminal is
+    // restored even if SubprocessPlugin::drop() blocks briefly.
+    let _terminal_guard = TerminalGuard;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
@@ -57,7 +78,9 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
 
     // Initialize screensaver
     let size = terminal.size()?;
-    saver.init(size.width, size.height)?;
+    let mut saver_w = size.width;
+    let mut saver_h = size.height;
+    saver.init(saver_w, saver_h)?;
 
     // Determine FPS
     let base_fps = if config.power.battery_aware {
@@ -109,7 +132,10 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
     let mut ambient_check = Instant::now();
     let ambient_check_interval = Duration::from_secs(60);
 
-    loop {
+    // OSD state (on-screen display for +/- cycling)
+    let mut osd_message: Option<(String, Instant)> = None;
+
+    'outer: loop {
         // Check for preview timeout
         if let Some(dur) = preview_duration {
             if start_time.elapsed() >= dur {
@@ -117,20 +143,39 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
             }
         }
 
-        // Poll for events
-        if event::poll(frame_duration)? {
-            let ev = event::read()?;
+        // Process all pending events within the frame time budget.
+        // Compensate poll timeout for time already elapsed since last render
+        // to maintain consistent frame intervals.
+        loop {
+            let remaining = frame_duration.saturating_sub(last_frame.elapsed());
+            // poll/read can fail transiently (e.g. EINTR from signals when the
+            // display sleeps/wakes).  Treat errors as "no event" rather than
+            // crashing the screensaver.
+            match event::poll(remaining) {
+                Ok(false) => break,  // Frame time elapsed, proceed to render
+                Ok(true) => {}       // Event available, read it below
+                Err(_) => break,     // Transient error, proceed to render
+            }
+            let ev = match event::read() {
+                Ok(ev) => ev,
+                Err(_) => break,     // Transient read error, proceed to render
+            };
 
-            // Handle resize
+            // Handle resize — clear ratatui's buffers so the next draw does
+            // a full repaint (fixes stale content after display sleep/wake,
+            // which many terminals signal via Resize).
             if let Event::Resize(w, h) = ev {
+                saver_w = w;
+                saver_h = h;
                 saver.init(w, h)?;
-                continue;
+                let _ = terminal.clear();
+                break; // Render immediately after resize
             }
 
             // Forward mouse events to screensaver
             if let Event::Mouse(_) = &ev {
                 let _ = saver.handle_event(&ev);
-                continue;
+                continue; // Keep draining events
             }
 
             // Handle key events
@@ -141,7 +186,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                         KeyCode::Enter => {
                             // Verify password
                             if auth::verify_password(&username, &password_buffer) {
-                                break; // Authenticated — exit screensaver
+                                break 'outer; // Authenticated — exit screensaver
                             } else {
                                 auth_message =
                                     Some(("Incorrect password".into(), Instant::now()));
@@ -168,19 +213,22 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                             auth_message = None;
                         }
                     }
-                    continue;
+                    continue; // Keep draining events
                 }
 
                 // If blanked, unblank on any key
                 if blanked {
                     blanked = false;
-                    saver.init(terminal.size()?.width, terminal.size()?.height)?;
+                    let size = terminal.size()?;
+                    saver_w = size.width;
+                    saver_h = size.height;
+                    saver.init(saver_w, saver_h)?;
                     if password_lock {
                         password_mode = true;
                         password_buffer.clear();
                         auth_message = None;
                     }
-                    continue;
+                    break; // Render immediately to show unblanked state
                 }
 
                 // Lock mode with password: enter password mode on any key
@@ -222,17 +270,72 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                     match menu_result {
                         crate::menu::MenuResult::Resume => {
                             let size = terminal.size()?;
-                            saver.init(size.width, size.height)?;
+                            saver_w = size.width;
+                            saver_h = size.height;
+                            saver.init(saver_w, saver_h)?;
                         }
                         crate::menu::MenuResult::Launch(name) => {
                             saver = create_plugin(&name, config);
                             let size = terminal.size()?;
-                            saver.init(size.width, size.height)?;
+                            saver_w = size.width;
+                            saver_h = size.height;
+                            saver.init(saver_w, saver_h)?;
                         }
-                        crate::menu::MenuResult::Quit => break,
+                        crate::menu::MenuResult::Quit => break 'outer,
                     }
                     last_frame = Instant::now();
-                    continue;
+                    break; // Render immediately after menu
+                }
+
+                // +/= cycle to next screensaver, - cycle to previous
+                if matches!(key_event.code, KeyCode::Char('+') | KeyCode::Char('=')) {
+                    let plugins = registry::plugins();
+                    if plugins.len() > 1 {
+                        let current_name = saver.name();
+                        let current_idx = plugins.iter().position(|p| p.name == current_name).unwrap_or(0);
+                        let next_idx = (current_idx + 1) % plugins.len();
+                        // Capture old buffer for transition
+                        if transition_style != TransitionStyle::None {
+                            let buf = terminal.current_buffer_mut();
+                            active_transition = Some(Transition::new(
+                                transition_style,
+                                transition_duration_ms,
+                                buf,
+                            ));
+                        }
+                        saver = create_plugin(&plugins[next_idx].name, config);
+                        let size = terminal.size()?;
+                        saver_w = size.width;
+                        saver_h = size.height;
+                        saver.init(saver_w, saver_h)?;
+                        rotate_timer = Instant::now();
+                        osd_message = Some((plugins[next_idx].name.clone(), Instant::now()));
+                    }
+                    break; // Render immediately to show new screensaver
+                }
+                if matches!(key_event.code, KeyCode::Char('-')) {
+                    let plugins = registry::plugins();
+                    if plugins.len() > 1 {
+                        let current_name = saver.name();
+                        let current_idx = plugins.iter().position(|p| p.name == current_name).unwrap_or(0);
+                        let prev_idx = if current_idx == 0 { plugins.len() - 1 } else { current_idx - 1 };
+                        if transition_style != TransitionStyle::None {
+                            let buf = terminal.current_buffer_mut();
+                            active_transition = Some(Transition::new(
+                                transition_style,
+                                transition_duration_ms,
+                                buf,
+                            ));
+                        }
+                        saver = create_plugin(&plugins[prev_idx].name, config);
+                        let size = terminal.size()?;
+                        saver_w = size.width;
+                        saver_h = size.height;
+                        saver.init(saver_w, saver_h)?;
+                        rotate_timer = Instant::now();
+                        osd_message = Some((plugins[prev_idx].name.clone(), Instant::now()));
+                    }
+                    break; // Render immediately to show new screensaver
                 }
 
                 // Non-locked mode: Escape and 'q' always exit
@@ -246,14 +349,14 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                         ..
                     }
                 ) {
-                    break;
+                    break 'outer;
                 }
 
                 // Let the screensaver handle the event
                 match saver.handle_event(&ev)? {
-                    EventResponse::Exit => break,
+                    EventResponse::Exit => break 'outer,
                     EventResponse::Continue => {}
-                    EventResponse::Ignored => break, // Any unhandled key exits
+                    EventResponse::Ignored => break 'outer, // Any unhandled key exits
                 }
             }
         }
@@ -263,10 +366,23 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
         let dt = now - last_frame;
         last_frame = now;
 
+        // Detect display sleep/wake: if more than 2 seconds elapsed since the
+        // last frame, the display was probably asleep.  Force a full repaint
+        // because ratatui's double-buffer is now out of sync with the screen.
+        if dt > Duration::from_secs(2) {
+            let _ = terminal.clear();
+            let size = terminal.size()?;
+            if size.width != saver_w || size.height != saver_h {
+                saver_w = size.width;
+                saver_h = size.height;
+                saver.init(saver_w, saver_h)?;
+            }
+        }
+
         // Screen blanking
         if config.blanking.enabled && !blanked && start_time.elapsed() >= blank_delay {
             blanked = true;
-            terminal.draw(|_frame| {})?;
+            let _ = terminal.draw(|_frame| {});
             continue;
         }
 
@@ -307,7 +423,9 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
 
                 saver = create_plugin(&rotate_list[rotate_index], config);
                 let size = terminal.size()?;
-                saver.init(size.width, size.height)?;
+                saver_w = size.width;
+                saver_h = size.height;
+                saver.init(saver_w, saver_h)?;
             }
         }
 
@@ -337,7 +455,28 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
             }
         }
 
-        // Render
+        // Clear expired OSD message
+        if let Some((_, t)) = &osd_message {
+            if t.elapsed() > Duration::from_secs(2) {
+                osd_message = None;
+            }
+        }
+
+        // Catch terminal size changes that bypass Event::Resize (e.g. ratatui autoresize).
+        // Without this, the frame buffer can silently grow larger than the plugin buffer,
+        // leaving the right/bottom edge cells unwritten and causing them to flash.
+        if let Ok((term_w, term_h)) = crossterm::terminal::size() {
+            if term_w != saver_w || term_h != saver_h {
+                saver_w = term_w;
+                saver_h = term_h;
+                saver.init(saver_w, saver_h)?;
+            }
+        }
+
+        // Render (synchronized output prevents tearing from partial frame writes).
+        // Swallow transient IO errors from the terminal — they can happen after
+        // display sleep/wake and are not fatal.
+        let _ = execute!(terminal.backend_mut(), BeginSynchronizedUpdate);
         let pw_mode = password_mode;
         let pw_len = password_buffer.len();
         let auth_msg = auth_message.as_ref().map(|(m, _)| m.as_str());
@@ -345,7 +484,8 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
         let trans_ref = &active_transition;
         let ambient_ref = &ambient;
         let saver_ref = &mut saver;
-        terminal.draw(|frame| {
+        let osd_ref = &osd_message;
+        let _ = terminal.draw(|frame| {
             let _ = saver_ref.render_frame(frame);
 
             // Apply transition effect if active
@@ -362,13 +502,28 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
             }
 
             overlay::render_clock(frame, &config.overlay);
+            overlay::render_info(frame, &config.overlay);
+            if let Some((name, started)) = osd_ref {
+                overlay::render_osd(frame, name, started.elapsed());
+            }
             if config.overlay.lock.enabled && lock_active && !pw_mode {
                 overlay::render_lock(frame, &config.overlay.lock.message);
             }
             if pw_mode {
                 overlay::render_password_prompt(frame, pw_len, auth_msg);
             }
-        })?;
+
+            // Reset the bottom-right cell to prevent terminal scroll.
+            // Writing a character at the last column of the last row causes the
+            // terminal cursor to wrap past the screen, triggering a scroll.
+            let area = frame.area();
+            let last_x = area.width.saturating_sub(1);
+            let last_y = area.height.saturating_sub(1);
+            frame.buffer_mut().cell_mut((last_x, last_y)).map(|c| {
+                c.reset();
+            });
+        });
+        let _ = execute!(terminal.backend_mut(), EndSynchronizedUpdate);
     }
 
     // Record session stats

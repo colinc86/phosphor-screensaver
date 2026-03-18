@@ -4,6 +4,9 @@ use ratatui::Frame;
 
 use crate::config::OverlayConfig;
 
+/// Dark background color for overlay pads.
+const BG_COLOR: Color = Color::Rgb(15, 13, 10);
+
 /// Render the clock overlay on top of the screensaver.
 pub fn render_clock(frame: &mut Frame, config: &OverlayConfig) {
     if !config.clock.enabled {
@@ -18,9 +21,23 @@ pub fn render_clock(frame: &mut Frame, config: &OverlayConfig) {
         now.format(&config.clock.format).to_string()
     };
 
-    let (x, y) = clock_position(&config.clock.position, area, time_str.len() as u16);
+    let text_width = time_str.len() as u16;
+    let (x, y) = clock_position(&config.clock.position, area, text_width);
 
+    // Background pad: 1 cell horizontal padding on each side
+    let bg_x = x.saturating_sub(1);
+    let bg_width = text_width + 2;
     let buf = frame.buffer_mut();
+    for bx in bg_x..bg_x + bg_width {
+        if bx < area.width && y < area.height {
+            buf.cell_mut((bx, y)).map(|cell| {
+                cell.set_char(' ');
+                cell.set_style(Style::default().bg(BG_COLOR));
+            });
+        }
+    }
+
+    // Draw clock text
     for (i, ch) in time_str.chars().enumerate() {
         let px = x + i as u16;
         if px < area.width && y < area.height {
@@ -28,7 +45,108 @@ pub fn render_clock(frame: &mut Frame, config: &OverlayConfig) {
                 cell.set_char(ch);
                 cell.set_style(
                     Style::default()
-                        .fg(Color::Rgb(100, 100, 100)),
+                        .fg(Color::Rgb(160, 160, 170))
+                        .bg(BG_COLOR),
+                );
+            });
+        }
+    }
+}
+
+/// Render the on-screen display (screensaver name after +/- cycling).
+/// Centered horizontally, 3/4 down the screen. Fades out over 2 seconds.
+pub fn render_osd(frame: &mut Frame, name: &str, elapsed: std::time::Duration) {
+    let area = frame.area();
+    let fade = 1.0 - (elapsed.as_secs_f64() / 2.0).min(1.0);
+    if fade <= 0.0 {
+        return;
+    }
+
+    let brightness = (160.0 * fade) as u8;
+    let bg_alpha = (15.0 * fade) as u8;
+
+    let text = format!(" {} ", name);
+    let text_width = text.len() as u16;
+    let x = area.width.saturating_sub(text_width) / 2;
+    let y = area.height * 3 / 4;
+
+    let buf = frame.buffer_mut();
+    for (i, ch) in text.chars().enumerate() {
+        let px = x + i as u16;
+        if px < area.width && y < area.height {
+            buf.cell_mut((px, y)).map(|cell| {
+                cell.set_char(ch);
+                cell.set_style(
+                    Style::default()
+                        .fg(Color::Rgb(brightness, brightness, brightness))
+                        .bg(Color::Rgb(bg_alpha, bg_alpha.saturating_sub(2), bg_alpha.saturating_sub(5))),
+                );
+            });
+        }
+    }
+}
+
+/// Render the info overlay (CWD, hostname) over the screensaver.
+pub fn render_info(frame: &mut Frame, config: &OverlayConfig) {
+    if !config.info.enabled {
+        return;
+    }
+
+    let mut parts: Vec<String> = Vec::new();
+
+    if config.info.show_cwd {
+        if let Ok(cwd) = std::env::current_dir() {
+            let display = abbreviate_home(&cwd.display().to_string());
+            parts.push(display);
+        }
+    }
+
+    if config.info.show_hostname {
+        if let Some(hostname) = get_hostname() {
+            parts.push(hostname);
+        }
+    }
+
+    if parts.is_empty() {
+        return;
+    }
+
+    let info_str = parts.join(" | ");
+    // Truncate long strings from the left
+    let area = frame.area();
+    let max_len = (area.width as usize).saturating_sub(4);
+    let info_str = if info_str.len() > max_len {
+        format!("...{}", &info_str[info_str.len() - max_len + 3..])
+    } else {
+        info_str
+    };
+
+    let text_width = info_str.len() as u16;
+    let (x, y) = info_position(&config.info.position, area, text_width);
+
+    // Background pad: 1 cell horizontal padding on each side
+    let bg_x = x.saturating_sub(1);
+    let bg_width = text_width + 2;
+    let buf = frame.buffer_mut();
+    for bx in bg_x..bg_x + bg_width {
+        if bx < area.width && y < area.height {
+            buf.cell_mut((bx, y)).map(|cell| {
+                cell.set_char(' ');
+                cell.set_style(Style::default().bg(BG_COLOR));
+            });
+        }
+    }
+
+    // Draw info text (dimmer than clock)
+    for (i, ch) in info_str.chars().enumerate() {
+        let px = x + i as u16;
+        if px < area.width && y < area.height {
+            buf.cell_mut((px, y)).map(|cell| {
+                cell.set_char(ch);
+                cell.set_style(
+                    Style::default()
+                        .fg(Color::Rgb(100, 100, 110))
+                        .bg(BG_COLOR),
                 );
             });
         }
@@ -170,6 +288,39 @@ fn clock_position(position: &str, area: Rect, width: u16) -> (u16, u16) {
     }
 }
 
+fn info_position(position: &str, area: Rect, width: u16) -> (u16, u16) {
+    match position {
+        "top-left" => (1, 0),
+        "top-right" => (area.width.saturating_sub(width + 1), 0),
+        "bottom-right" => (area.width.saturating_sub(width + 1), area.height.saturating_sub(1)),
+        // bottom-left (default)
+        _ => (1, area.height.saturating_sub(1)),
+    }
+}
+
+/// Abbreviate home directory to ~/...
+fn abbreviate_home(path: &str) -> String {
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.display().to_string();
+        if path.starts_with(&home_str) {
+            return format!("~{}", &path[home_str.len()..]);
+        }
+    }
+    path.to_string()
+}
+
+/// Get hostname via libc gethostname.
+fn get_hostname() -> Option<String> {
+    let mut buf = [0u8; 256];
+    // SAFETY: gethostname writes into buf up to its length and null-terminates.
+    let ret = unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
+    if ret != 0 {
+        return None;
+    }
+    let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    String::from_utf8(buf[..len].to_vec()).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,5 +355,44 @@ mod tests {
         let (x, y) = clock_position("bottom-right", area, 5);
         assert_eq!(x, 74);
         assert_eq!(y, 23);
+    }
+
+    #[test]
+    fn info_position_default_bottom_left() {
+        let area = Rect::new(0, 0, 80, 24);
+        let (x, y) = info_position("bottom-left", area, 10);
+        assert_eq!(x, 1);
+        assert_eq!(y, 23);
+    }
+
+    #[test]
+    fn info_position_top_right() {
+        let area = Rect::new(0, 0, 80, 24);
+        let (x, y) = info_position("top-right", area, 10);
+        assert_eq!(x, 69);
+        assert_eq!(y, 0);
+    }
+
+    #[test]
+    fn abbreviate_home_replaces_prefix() {
+        if let Some(home) = dirs::home_dir() {
+            let path = format!("{}/projects/foo", home.display());
+            let result = abbreviate_home(&path);
+            assert_eq!(result, "~/projects/foo");
+        }
+    }
+
+    #[test]
+    fn abbreviate_home_no_match() {
+        let result = abbreviate_home("/tmp/something");
+        assert_eq!(result, "/tmp/something");
+    }
+
+    #[test]
+    fn get_hostname_returns_something() {
+        // Should succeed on any unix system
+        let hostname = get_hostname();
+        assert!(hostname.is_some());
+        assert!(!hostname.unwrap().is_empty());
     }
 }

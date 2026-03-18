@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use crossterm::execute;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    BeginSynchronizedUpdate, EndSynchronizedUpdate, EnterAlternateScreen, LeaveAlternateScreen,
+    disable_raw_mode, enable_raw_mode,
 };
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -185,6 +186,7 @@ pub fn run(config: &Config) -> io::Result<()> {
         let panel_h = layout.panel_h;
         let cols = layout.cols;
         let saver_names: Vec<&str> = savers.iter().map(|s| s.name()).collect();
+        execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
         terminal.draw(|frame| {
             let area = frame.area();
 
@@ -266,7 +268,13 @@ pub fn run(config: &Config) -> io::Result<()> {
                     cell.set_style(Style::default().bg(Color::DarkGray));
                 });
             }
+
+            // Reset bottom-right cell to prevent terminal scroll
+            let last_x = area.width.saturating_sub(1);
+            let last_y = area.height.saturating_sub(1);
+            frame.buffer_mut().cell_mut((last_x, last_y)).map(|c| c.reset());
         })?;
+        execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
     }
 
     // Restore terminal

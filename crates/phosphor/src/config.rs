@@ -42,6 +42,7 @@ pub struct RotateConfig {
 #[serde(default)]
 pub struct OverlayConfig {
     pub clock: ClockOverlayConfig,
+    pub info: InfoOverlayConfig,
     pub lock: LockOverlayConfig,
 }
 
@@ -52,6 +53,15 @@ pub struct ClockOverlayConfig {
     pub position: String,
     pub format: String,
     pub show_seconds: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InfoOverlayConfig {
+    pub enabled: bool,
+    pub show_cwd: bool,
+    pub show_hostname: bool,
+    pub position: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,7 +132,7 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             timeout: 300,
-            fps: 30,
+            fps: 60,
             default_screensaver: "starfield".into(),
             fade_enabled: true,
             fade_duration_ms: 500,
@@ -152,7 +162,19 @@ impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
             clock: ClockOverlayConfig::default(),
+            info: InfoOverlayConfig::default(),
             lock: LockOverlayConfig::default(),
+        }
+    }
+}
+
+impl Default for InfoOverlayConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            show_cwd: true,
+            show_hostname: false,
+            position: "bottom-left".into(),
         }
     }
 }
@@ -191,8 +213,8 @@ impl Default for PowerConfig {
     fn default() -> Self {
         Self {
             battery_aware: true,
-            battery_fps: 15,
-            ac_fps: 30,
+            battery_fps: 30,
+            ac_fps: 60,
         }
     }
 }
@@ -332,7 +354,7 @@ mod tests {
     fn default_config_is_valid() {
         let config = Config::default();
         assert_eq!(config.general.timeout, 300);
-        assert_eq!(config.general.fps, 30);
+        assert_eq!(config.general.fps, 60);
         assert_eq!(config.general.default_screensaver, "starfield");
         assert!(config.general.fade_enabled);
     }
@@ -376,7 +398,7 @@ fps = 60
         let mut config = Config::default();
         config.merge_cli(None, None, false);
         assert_eq!(config.general.default_screensaver, "starfield");
-        assert_eq!(config.general.fps, 30);
+        assert_eq!(config.general.fps, 60);
         assert!(config.general.fade_enabled);
     }
 
