@@ -1,11 +1,11 @@
 use std::collections::{BinaryHeap, HashMap};
 use std::time::Duration;
 
-use rand::Rng;
-use serde::Deserialize;
 use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
+use rand::Rng;
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -348,6 +348,7 @@ impl ScreensaverPlugin for Maze {
         PluginInfo {
             name: "maze".into(),
             description: "Maze generation and solving with animated pathfinding".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "Animated maze generation".into(),
@@ -445,8 +446,7 @@ impl ScreensaverPlugin for Maze {
                 }
             }
             Phase::Dissolving => {
-                let dissolve_speed =
-                    (self.grid_rows * self.grid_cols) as f64 / 60.0;
+                let dissolve_speed = (self.grid_rows * self.grid_cols) as f64 / 60.0;
                 self.step_accum += dissolve_speed;
                 let steps = self.step_accum as usize;
                 self.step_accum -= steps as f64;
@@ -483,8 +483,24 @@ impl ScreensaverPlugin for Maze {
                     CellState::Solution => ('\u{2588}', PluginColor::Rgb(0, 255, 255)),
                 };
 
-                buf.set(tx, ty, Cell { ch, fg, bg: PluginColor::Reset });
-                buf.set(tx + 1, ty, Cell { ch, fg, bg: PluginColor::Reset });
+                buf.set(
+                    tx,
+                    ty,
+                    Cell {
+                        ch,
+                        fg,
+                        bg: PluginColor::Reset,
+                    },
+                );
+                buf.set(
+                    tx + 1,
+                    ty,
+                    Cell {
+                        ch,
+                        fg,
+                        bg: PluginColor::Reset,
+                    },
+                );
             }
         }
     }
@@ -537,8 +553,7 @@ mod tests {
         for _ in 0..50 {
             maze.update(Duration::from_millis(33));
         }
-        let changed = maze.gen_stack.len() != initial_stack
-            || maze.phase != Phase::Generating;
+        let changed = maze.gen_stack.len() != initial_stack || maze.phase != Phase::Generating;
         assert!(changed);
     }
 

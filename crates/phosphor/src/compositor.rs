@@ -13,6 +13,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
 use crate::config::Config;
+use crate::filter::FilterState;
 use crate::plugin_host::copy_buffer_to_region;
 use crate::registry;
 
@@ -54,6 +55,7 @@ pub fn run(
     let frame_duration = Duration::from_millis(1000 / config.general.fps.max(1) as u64);
     let mut last_frame = Instant::now();
     let start_time = Instant::now();
+    let mut filter_state = FilterState::new(size.width, size.height);
 
     loop {
         // Check preview timeout
@@ -102,6 +104,7 @@ pub fn run(
         let size = Rect::new(0, 0, term_size.width, term_size.height);
         let (la, ra, div) = compute_areas(size, orientation, &config.compositor.split_ratio);
         let divider_style_name = &config.compositor.divider_style;
+        let filter_ref = &mut filter_state;
 
         execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
         terminal.draw(|frame| {
@@ -136,11 +139,16 @@ pub fn run(
                 }
             }
 
+            // Apply visual filters
+            filter_ref.apply(frame.buffer_mut(), &config.filter);
+
             // Reset bottom-right cell to prevent terminal scroll
             let area = frame.area();
             let last_x = area.width.saturating_sub(1);
             let last_y = area.height.saturating_sub(1);
-            frame.buffer_mut().cell_mut((last_x, last_y)).map(|c| c.reset());
+            if let Some(c) = frame.buffer_mut().cell_mut((last_x, last_y)) {
+                c.reset()
+            }
         })?;
         execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
     }

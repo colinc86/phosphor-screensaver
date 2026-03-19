@@ -1,10 +1,9 @@
 use std::time::Duration;
 
-use serde::Deserialize;
 use phosphor_plugin::{
-    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
-    ScreensaverPlugin,
+    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -115,37 +114,85 @@ const DIGITS: [[&str; 5]; 11] = [
         "\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}",
     ],
     // : (colon) - index 10
-    [
-        "     ",
-        "  \u{2588}  ",
-        "     ",
-        "  \u{2588}  ",
-        "     ",
-    ],
+    ["     ", "  \u{2588}  ", "     ", "  \u{2588}  ", "     "],
 ];
 
 /// 5-line tall 7-segment style font for digits 0-9 and colon.
 const DIGITS_SEGMENT: [[&str; 5]; 11] = [
     // 0
-    [" \u{2584}\u{2584}\u{2584} ", "\u{2502}   \u{2502}", "     ", "\u{2502}   \u{2502}", " \u{2580}\u{2580}\u{2580} "],
+    [
+        " \u{2584}\u{2584}\u{2584} ",
+        "\u{2502}   \u{2502}",
+        "     ",
+        "\u{2502}   \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+    ],
     // 1
     ["     ", "    \u{2502}", "     ", "    \u{2502}", "     "],
     // 2
-    [" \u{2584}\u{2584}\u{2584} ", "    \u{2502}", " \u{2584}\u{2584}\u{2584} ", "\u{2502}    ", " \u{2580}\u{2580}\u{2580} "],
+    [
+        " \u{2584}\u{2584}\u{2584} ",
+        "    \u{2502}",
+        " \u{2584}\u{2584}\u{2584} ",
+        "\u{2502}    ",
+        " \u{2580}\u{2580}\u{2580} ",
+    ],
     // 3
-    [" \u{2584}\u{2584}\u{2584} ", "    \u{2502}", " \u{2584}\u{2584}\u{2584} ", "    \u{2502}", " \u{2580}\u{2580}\u{2580} "],
+    [
+        " \u{2584}\u{2584}\u{2584} ",
+        "    \u{2502}",
+        " \u{2584}\u{2584}\u{2584} ",
+        "    \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+    ],
     // 4
-    ["     ", "\u{2502}   \u{2502}", " \u{2580}\u{2580}\u{2580} ", "    \u{2502}", "     "],
+    [
+        "     ",
+        "\u{2502}   \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+        "    \u{2502}",
+        "     ",
+    ],
     // 5
-    [" \u{2584}\u{2584}\u{2584} ", "\u{2502}    ", " \u{2580}\u{2580}\u{2580} ", "    \u{2502}", " \u{2580}\u{2580}\u{2580} "],
+    [
+        " \u{2584}\u{2584}\u{2584} ",
+        "\u{2502}    ",
+        " \u{2580}\u{2580}\u{2580} ",
+        "    \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+    ],
     // 6
-    [" \u{2584}\u{2584}\u{2584} ", "\u{2502}    ", " \u{2580}\u{2580}\u{2580} ", "\u{2502}   \u{2502}", " \u{2580}\u{2580}\u{2580} "],
+    [
+        " \u{2584}\u{2584}\u{2584} ",
+        "\u{2502}    ",
+        " \u{2580}\u{2580}\u{2580} ",
+        "\u{2502}   \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+    ],
     // 7
-    [" \u{2584}\u{2584}\u{2584} ", "    \u{2502}", "     ", "    \u{2502}", "     "],
+    [
+        " \u{2584}\u{2584}\u{2584} ",
+        "    \u{2502}",
+        "     ",
+        "    \u{2502}",
+        "     ",
+    ],
     // 8
-    [" \u{2584}\u{2584}\u{2584} ", "\u{2502}   \u{2502}", " \u{2580}\u{2580}\u{2580} ", "\u{2502}   \u{2502}", " \u{2580}\u{2580}\u{2580} "],
+    [
+        " \u{2584}\u{2584}\u{2584} ",
+        "\u{2502}   \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+        "\u{2502}   \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+    ],
     // 9
-    [" \u{2584}\u{2584}\u{2584} ", "\u{2502}   \u{2502}", " \u{2580}\u{2580}\u{2580} ", "    \u{2502}", " \u{2580}\u{2580}\u{2580} "],
+    [
+        " \u{2584}\u{2584}\u{2584} ",
+        "\u{2502}   \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+        "    \u{2502}",
+        " \u{2580}\u{2580}\u{2580} ",
+    ],
     // : (colon) - index 10
     ["     ", "  \u{25CF}  ", "     ", "  \u{25CF}  ", "     "],
 ];
@@ -292,6 +339,7 @@ impl ScreensaverPlugin for DigitalClock {
         PluginInfo {
             name: "digital_clock".into(),
             description: "A large ASCII-art digital clock display".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "Block and segment font styles".into(),
@@ -445,7 +493,11 @@ impl ScreensaverPlugin for DigitalClock {
                         buf.set(
                             x,
                             y,
-                            Cell { ch: glyph_ch, fg: digit_color, bg: PluginColor::Reset },
+                            Cell {
+                                ch: glyph_ch,
+                                fg: digit_color,
+                                bg: PluginColor::Reset,
+                            },
                         );
                     }
                 }
@@ -466,7 +518,11 @@ impl ScreensaverPlugin for DigitalClock {
                         buf.set(
                             x,
                             date_y,
-                            Cell { ch, fg: dim_color, bg: PluginColor::Reset },
+                            Cell {
+                                ch,
+                                fg: dim_color,
+                                bg: PluginColor::Reset,
+                            },
                         );
                     }
                 }

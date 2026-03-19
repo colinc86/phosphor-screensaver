@@ -123,13 +123,7 @@ mod tests {
     fn fps_selection() {
         assert_eq!(fps_for_power_state(PowerState::Battery, 15, 30, true), 15);
         assert_eq!(fps_for_power_state(PowerState::AC, 15, 30, true), 30);
-        assert_eq!(
-            fps_for_power_state(PowerState::Unknown, 15, 30, true),
-            30
-        );
-        assert_eq!(
-            fps_for_power_state(PowerState::Battery, 15, 30, false),
-            30
-        );
+        assert_eq!(fps_for_power_state(PowerState::Unknown, 15, 30, true), 30);
+        assert_eq!(fps_for_power_state(PowerState::Battery, 15, 30, false), 30);
     }
 }

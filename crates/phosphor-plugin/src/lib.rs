@@ -1,12 +1,15 @@
 pub mod buffer;
 pub mod config_meta;
+pub mod prelude;
 pub mod protocol;
 pub mod runner;
 pub mod theme;
 
 pub use buffer::{Cell, PluginBuffer, PluginColor};
 pub use config_meta::{ConfigField, FieldKind, PluginInfo};
-pub use protocol::{EventResponse, HostMessage, KeyCode, KeyInput, MouseInput, MouseKind, PluginMessage};
+pub use protocol::{
+    EventResponse, HostMessage, KeyCode, KeyInput, MouseInput, MouseKind, PluginMessage,
+};
 pub use runner::run;
 pub use theme::ThemeColors;
 
@@ -26,9 +29,9 @@ pub trait ScreensaverPlugin {
     /// Render the current frame into the buffer.
     fn render(&self, buf: &mut PluginBuffer);
 
-    /// Handle a key event. Default: ignored (app exits on any key).
+    /// Handle a key event. Default: continue (non-interactive plugins silently accept keys).
     fn handle_key(&mut self, _key: KeyInput) -> EventResponse {
-        EventResponse::Ignored
+        EventResponse::Continue
     }
 
     /// Handle a mouse event. Default: ignored.

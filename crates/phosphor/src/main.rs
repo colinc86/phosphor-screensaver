@@ -4,6 +4,7 @@ mod auth;
 mod compositor;
 mod config;
 mod fade;
+mod filter;
 mod gallery;
 mod menu;
 mod overlay;
@@ -92,6 +93,19 @@ enum Command {
         #[arg(long)]
         timeout: u64,
     },
+
+    /// Enable automatic screensaver activation
+    Enable,
+
+    /// Disable automatic screensaver activation
+    Disable,
+
+    /// Show whether phosphor is enabled or disabled
+    Status,
+
+    /// Check if enabled (exit code 0=yes, 1=no; for shell scripts)
+    #[command(name = "is-enabled", hide = true)]
+    IsEnabled,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -107,16 +121,13 @@ fn main() {
     match cli.command {
         None | Some(Command::Config) => {
             // No subcommand or `config`: open interactive menu
-            loop {
-                match menu::run(&config, menu::MenuContext::Standalone) {
-                    Ok(menu::MenuResult::Launch(name)) => {
-                        config.general.default_screensaver = name;
-                        config.general.fade_enabled = false;
-                        let _ = app::run(&config, None);
-                        config = Config::load(); // Reload any saved changes
-                    }
-                    _ => break,
-                }
+            while let Ok(menu::MenuResult::Launch(name)) =
+                menu::run(&config, menu::MenuContext::Standalone)
+            {
+                config.general.default_screensaver = name;
+                config.general.fade_enabled = false;
+                let _ = app::run(&config, None);
+                config = Config::load(); // Reload any saved changes
             }
         }
 
@@ -142,7 +153,9 @@ fn main() {
                         compositor::SplitOrientation::Horizontal,
                     )
                 } else {
-                    eprintln!("Invalid split format. Use 'name1|name2' for vertical or 'name1/name2' for horizontal");
+                    eprintln!(
+                        "Invalid split format. Use 'name1|name2' for vertical or 'name1/name2' for horizontal"
+                    );
                     std::process::exit(1);
                 };
                 if let Err(e) = compositor::run(&config, left, right, orientation, None) {
@@ -160,7 +173,10 @@ fn main() {
             for plugin in registry::plugins() {
                 println!("  {:<20} {}", plugin.name, plugin.info.description);
             }
-            println!("  {:<20} Randomly selects a screensaver each time", "random");
+            println!(
+                "  {:<20} Randomly selects a screensaver each time",
+                "random"
+            );
         }
 
         Some(Command::Preview { name, duration }) => {
@@ -195,6 +211,38 @@ fn main() {
         Some(Command::Watch { shell_pid, timeout }) => {
             if let Err(e) = watch::run(shell_pid, timeout, &config) {
                 eprintln!("Watch error: {e}");
+                std::process::exit(1);
+            }
+        }
+
+        Some(Command::Enable) => {
+            config.general.enabled = true;
+            if let Err(e) = config.save() {
+                eprintln!("Error saving config: {e}");
+                std::process::exit(1);
+            }
+            println!("Phosphor enabled.");
+        }
+
+        Some(Command::Disable) => {
+            config.general.enabled = false;
+            if let Err(e) = config.save() {
+                eprintln!("Error saving config: {e}");
+                std::process::exit(1);
+            }
+            println!("Phosphor disabled.");
+        }
+
+        Some(Command::Status) => {
+            if config.general.enabled {
+                println!("Phosphor is enabled.");
+            } else {
+                println!("Phosphor is disabled.");
+            }
+        }
+
+        Some(Command::IsEnabled) => {
+            if !config.general.enabled {
                 std::process::exit(1);
             }
         }
@@ -250,6 +298,9 @@ TMOUT={timeout}
 TRAPALRM() {{
     [[ ! -t 0 ]] && return
     [[ -n "$PHOSPHOR_ACTIVE" ]] && return
+
+    # Check if phosphor is enabled
+    command phosphor is-enabled || return
 
     unset TMOUT
 

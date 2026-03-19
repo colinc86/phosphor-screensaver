@@ -6,12 +6,12 @@
 
 **Terminal screensavers, the way they were meant to be.**
 
-Phosphor is a screensaver system for your terminal. It watches for idle time, fades to black, and runs one of 13 built-in screensavers — or your own custom one. Named after CRT phosphor burn-in, the original reason screensavers were invented.
+Phosphor is a screensaver system for your terminal. It watches for idle time, fades to black, and runs one of 16 built-in screensavers — or your own custom one. Named after CRT phosphor burn-in, the original reason screensavers were invented.
 
 ## Install
 
 ```bash
-git clone https://github.com/colinmarc/phosphor.git
+git clone https://github.com/colinc86/phosphor.git
 cd phosphor
 ./install.sh
 ```
@@ -67,6 +67,9 @@ phosphor stats
 | `plasma` | Demoscene plasma effect with morphing rainbow waves |
 | `starfield` | Parallax starfield flying through space |
 | `terrain` | Voxel-space terrain flyover with procedural noise |
+| `flurry` | macOS Flurry-inspired particle swirl |
+| `rotating_cube` | 3D wireframe cube with Braille rendering |
+| `road_racer` | 90s OutRun-style pseudo-3D racer (playable) |
 
 ## How it works
 
@@ -89,6 +92,9 @@ impl ScreensaverPlugin for MyPlugin {
         PluginInfo {
             name: "my_screensaver".into(),
             description: "Does something groovy".into(),
+            interactive: false,
+            key_bindings: vec![],
+            features: vec![],
             config_fields: vec![],
         }
     }

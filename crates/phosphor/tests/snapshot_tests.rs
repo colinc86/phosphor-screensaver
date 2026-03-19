@@ -2,11 +2,7 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
 /// Helper: create a test terminal and render a single frame.
-fn render_frame(
-    width: u16,
-    height: u16,
-    render_fn: impl FnOnce(&mut ratatui::Frame),
-) -> String {
+fn render_frame(width: u16, height: u16, render_fn: impl FnOnce(&mut ratatui::Frame)) -> String {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).unwrap();
     terminal

@@ -1,12 +1,12 @@
 use std::time::Duration;
 
+use phosphor_plugin::protocol::KeyCode;
+use phosphor_plugin::{
+    Cell, ConfigField, EventResponse, FieldKind, KeyInput, PluginBuffer, PluginColor, PluginInfo,
+    ScreensaverPlugin,
+};
 use rand::Rng;
 use serde::Deserialize;
-use phosphor_plugin::{
-    Cell, ConfigField, EventResponse, FieldKind, KeyInput, PluginBuffer, PluginColor,
-    PluginInfo, ScreensaverPlugin,
-};
-use phosphor_plugin::protocol::KeyCode;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -92,11 +92,16 @@ impl CharSet {
                 char::from_u32(cp).unwrap_or('\u{30A2}')
             }
             CharSet::Ascii => {
-                let chars: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&";
+                let chars: &[u8] =
+                    b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&";
                 chars[rng.random_range(0..chars.len())] as char
             }
             CharSet::Binary => {
-                if rng.random_bool(0.5) { '0' } else { '1' }
+                if rng.random_bool(0.5) {
+                    '0'
+                } else {
+                    '1'
+                }
             }
         }
     }
@@ -177,9 +182,17 @@ impl MatrixRain {
 
     fn spawn_column(height: u16, speed: f64, charset: CharSet, depth_layers: bool) -> Column {
         let mut rng = rand::rng();
-        let layer = if depth_layers { Self::assign_layer() } else { 1 };
+        let layer = if depth_layers {
+            Self::assign_layer()
+        } else {
+            1
+        };
         let length = rng.random_range(4..height.max(5) as usize);
-        let layer_mult = if depth_layers { Self::layer_speed_multiplier(layer) } else { 1.0 };
+        let layer_mult = if depth_layers {
+            Self::layer_speed_multiplier(layer)
+        } else {
+            1.0
+        };
         let col_speed = speed * rng.random_range(8.0..25.0) * layer_mult;
         let chars: Vec<char> = (0..length).map(|_| charset.random_char()).collect();
         Column {
@@ -198,6 +211,7 @@ impl ScreensaverPlugin for MatrixRain {
         PluginInfo {
             name: "matrix_rain".into(),
             description: "Falling characters in the style of The Matrix".into(),
+            interactive: true,
             key_bindings: vec![
                 ("+/-".into(), "Increase/decrease density".into()),
                 ("s".into(), "Cycle speed mode".into()),
@@ -273,7 +287,8 @@ impl ScreensaverPlugin for MatrixRain {
         let mut rng = rand::rng();
         for _ in 0..width {
             if rng.random_range(0.0..1.0) < self.density {
-                let mut col = Self::spawn_column(height, self.speed, self.charset, self.depth_layers);
+                let mut col =
+                    Self::spawn_column(height, self.speed, self.charset, self.depth_layers);
                 col.head_y = rng.random_range(-(height as f64)..height as f64);
                 self.columns.push(col);
             } else {
@@ -310,7 +325,12 @@ impl ScreensaverPlugin for MatrixRain {
         for (col_idx, col) in self.columns.iter_mut().enumerate() {
             if !col.active {
                 if rng.random_range(0.0..1.0) < 0.01 {
-                    *col = Self::spawn_column(self.height, self.speed, self.charset, self.depth_layers);
+                    *col = Self::spawn_column(
+                        self.height,
+                        self.speed,
+                        self.charset,
+                        self.depth_layers,
+                    );
                 }
                 continue;
             }
@@ -388,7 +408,15 @@ impl ScreensaverPlugin for MatrixRain {
                     PluginColor::Rgb(0, g_base, 0)
                 };
 
-                buf.set(col_idx as u16, row as u16, Cell { ch, fg: color, bg: PluginColor::Reset });
+                buf.set(
+                    col_idx as u16,
+                    row as u16,
+                    Cell {
+                        ch,
+                        fg: color,
+                        bg: PluginColor::Reset,
+                    },
+                );
             }
         }
     }
@@ -525,8 +553,14 @@ mod tests {
         assert!(mr.glitch_wave_x.is_none());
 
         mr.update(Duration::from_secs(2));
-        assert!(mr.glitch_wave_x.is_some(), "wave should have started after interval elapsed");
-        assert!((mr.glitch_wave_x.unwrap() - 0.0).abs() < 0.001, "wave should start at x=0");
+        assert!(
+            mr.glitch_wave_x.is_some(),
+            "wave should have started after interval elapsed"
+        );
+        assert!(
+            (mr.glitch_wave_x.unwrap() - 0.0).abs() < 0.001,
+            "wave should start at x=0"
+        );
 
         mr.update(Duration::from_millis(100));
         let wave_x_after = mr.glitch_wave_x.unwrap();
@@ -554,25 +588,40 @@ mod tests {
         mr.init(80, 24);
 
         let initial_density = mr.density;
-        let key = KeyInput { code: KeyCode::Char('+'), modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Char('+'),
+            modifiers: 0,
+        };
         assert_eq!(mr.handle_key(key), EventResponse::Continue);
         assert!((mr.density - (initial_density + 0.1)).abs() < 0.001);
 
-        let key = KeyInput { code: KeyCode::Char('-'), modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Char('-'),
+            modifiers: 0,
+        };
         assert_eq!(mr.handle_key(key), EventResponse::Continue);
         assert!((mr.density - initial_density).abs() < 0.001);
 
         assert_eq!(mr.speed_mode, SpeedMode::Normal);
-        let key = KeyInput { code: KeyCode::Char('s'), modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Char('s'),
+            modifiers: 0,
+        };
         assert_eq!(mr.handle_key(key), EventResponse::Continue);
         assert_eq!(mr.speed_mode, SpeedMode::Fast);
 
         assert_eq!(mr.charset, CharSet::Katakana);
-        let key = KeyInput { code: KeyCode::Char('c'), modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Char('c'),
+            modifiers: 0,
+        };
         assert_eq!(mr.handle_key(key), EventResponse::Continue);
         assert_eq!(mr.charset, CharSet::Ascii);
 
-        let key = KeyInput { code: KeyCode::Char('z'), modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Char('z'),
+            modifiers: 0,
+        };
         assert_eq!(mr.handle_key(key), EventResponse::Ignored);
     }
 
@@ -582,7 +631,10 @@ mod tests {
         let mut mr = MatrixRain::new(config);
         mr.init(80, 24);
 
-        let key = KeyInput { code: KeyCode::Char('+'), modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Char('+'),
+            modifiers: 0,
+        };
         assert_eq!(mr.handle_key(key), EventResponse::Ignored);
     }
 

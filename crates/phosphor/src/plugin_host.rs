@@ -77,13 +77,13 @@ impl SubprocessPlugin {
             child
                 .stdin
                 .take()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no stdin"))?,
+                .ok_or_else(|| io::Error::other("no stdin"))?,
         );
         let stdout = BufReader::new(
             child
                 .stdout
                 .take()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no stdout"))?,
+                .ok_or_else(|| io::Error::other("no stdout"))?,
         );
 
         // Send config before handing stdin to the I/O thread
@@ -118,13 +118,6 @@ impl SubprocessPlugin {
 impl Drop for SubprocessPlugin {
     fn drop(&mut self) {
         let _ = self.cmd_tx.send(IoCmd::Shutdown);
-        // Kill the child process so the IO thread's blocking read on stdout
-        // returns EOF immediately.  The IO thread detects the broken pipe,
-        // runs its own cleanup (child.kill + child.wait to reap the zombie),
-        // and exits.  We intentionally do NOT join the IO thread here —
-        // join() can block if the thread hasn't processed the signal yet,
-        // which freezes the host during screensaver transitions.  The
-        // detached thread finishes within milliseconds on its own.
         #[cfg(unix)]
         unsafe {
             libc::kill(self.child_id as libc::pid_t, libc::SIGKILL);
@@ -159,11 +152,13 @@ impl PluginRenderer for SubprocessPlugin {
     }
 
     fn render_to_buffer(&mut self) -> io::Result<&Buffer> {
-        // Block-wait briefly for the first frame after init.
-        // Keep this short (50ms) to avoid blocking event processing —
-        // plugins typically respond within a few milliseconds.
+        // Block-wait for the first frame after init.  500ms is generous
+        // but only fires once per plugin lifecycle (when `has_frame` is
+        // false).  Cold subprocess startup (fork+exec+init) can exceed
+        // 50ms, causing an empty (black) first frame that ruins dissolve
+        // transitions.  The dissolve itself is 800ms, so 500ms is fine.
         if !self.has_frame
-            && let Ok(frame) = self.frame_rx.recv_timeout(Duration::from_millis(50))
+            && let Ok(frame) = self.frame_rx.recv_timeout(Duration::from_millis(500))
         {
             self.latest_frame = frame;
             self.has_frame = true;
@@ -217,7 +212,6 @@ fn io_thread_main(
     let mut height: u16 = 24;
 
     while let Ok(first) = cmd_rx.recv() {
-
         // Drain all pending commands into a batch
         let mut batch = vec![first];
         while let Ok(cmd) = cmd_rx.try_recv() {
@@ -349,15 +343,15 @@ fn sync_to_buffer(plugin_buf: &PluginBuffer, width: u16, height: u16) -> Buffer 
             if x == last_x && y == last_y {
                 continue; // skip bottom-right cell
             }
-            if let Some(cell) = plugin_buf.get(x, y) {
-                buffer.cell_mut((x, y)).map(|dst| {
-                    dst.set_char(cell.ch);
-                    dst.set_style(
-                        Style::default()
-                            .fg(plugin_color_to_ratatui(cell.fg))
-                            .bg(plugin_color_to_ratatui(cell.bg)),
-                    );
-                });
+            if let Some(cell) = plugin_buf.get(x, y)
+                && let Some(dst) = buffer.cell_mut((x, y))
+            {
+                dst.set_char(cell.ch);
+                dst.set_style(
+                    Style::default()
+                        .fg(plugin_color_to_ratatui(cell.fg))
+                        .bg(plugin_color_to_ratatui(cell.bg)),
+                );
             }
         }
     }
@@ -393,7 +387,7 @@ fn crossterm_key_to_proto(key: &KeyEvent) -> KeyInput {
         KeyCode::Right => ProtoKeyCode::Right,
         _ => ProtoKeyCode::Other(0),
     };
-    let modifiers = key.modifiers.bits() as u8;
+    let modifiers = key.modifiers.bits();
     KeyInput { code, modifiers }
 }
 
@@ -429,12 +423,12 @@ fn copy_buffer(src: &Buffer, dst: &mut Buffer) {
             if x == last_x && y == last_y {
                 continue;
             }
-            if let Some(src_cell) = src.cell((x, y)) {
-                dst.cell_mut((x, y)).map(|dst_cell| {
-                    let ch: char = src_cell.symbol().chars().next().unwrap_or(' ');
-                    dst_cell.set_char(ch);
-                    dst_cell.set_style(src_cell.style());
-                });
+            if let Some(src_cell) = src.cell((x, y))
+                && let Some(dst_cell) = dst.cell_mut((x, y))
+            {
+                let ch: char = src_cell.symbol().chars().next().unwrap_or(' ');
+                dst_cell.set_char(ch);
+                dst_cell.set_style(src_cell.style());
             }
         }
     }
@@ -446,10 +440,10 @@ fn copy_buffer(src: &Buffer, dst: &mut Buffer) {
             if x == last_x && y == last_y {
                 continue;
             }
-            dst.cell_mut((x, y)).map(|c| {
+            if let Some(c) = dst.cell_mut((x, y)) {
                 c.set_char(' ');
                 c.set_style(black);
-            });
+            }
         }
     }
     for y in max_y..dst.area.height {
@@ -457,10 +451,10 @@ fn copy_buffer(src: &Buffer, dst: &mut Buffer) {
             if x == last_x && y == last_y {
                 continue;
             }
-            dst.cell_mut((x, y)).map(|c| {
+            if let Some(c) = dst.cell_mut((x, y)) {
                 c.set_char(' ');
                 c.set_style(black);
-            });
+            }
         }
     }
 }
@@ -477,12 +471,12 @@ pub fn copy_buffer_to_region(src: &Buffer, dst: &mut Buffer, area: Rect) {
             if dst_x == last_x && dst_y == last_y {
                 continue;
             }
-            if let Some(src_cell) = src.cell((x, y)) {
-                dst.cell_mut((dst_x, dst_y)).map(|dst_cell| {
-                    let ch: char = src_cell.symbol().chars().next().unwrap_or(' ');
-                    dst_cell.set_char(ch);
-                    dst_cell.set_style(src_cell.style());
-                });
+            if let Some(src_cell) = src.cell((x, y))
+                && let Some(dst_cell) = dst.cell_mut((dst_x, dst_y))
+            {
+                let ch: char = src_cell.symbol().chars().next().unwrap_or(' ');
+                dst_cell.set_char(ch);
+                dst_cell.set_style(src_cell.style());
             }
         }
     }
@@ -496,9 +490,9 @@ mod tests {
     fn copy_buffer_to_region_basic() {
         let src_area = Rect::new(0, 0, 5, 3);
         let mut src = Buffer::empty(src_area);
-        src.cell_mut((2, 1)).map(|c| {
+        if let Some(c) = src.cell_mut((2, 1)) {
             c.set_char('X');
-        });
+        }
 
         let dst_area = Rect::new(0, 0, 20, 10);
         let mut dst = Buffer::empty(dst_area);

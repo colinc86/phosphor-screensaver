@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 pub struct PluginInfo {
     pub name: String,
     pub description: String,
+    #[serde(default)]
+    pub interactive: bool,
     pub key_bindings: Vec<(String, String)>,
     pub features: Vec<String>,
     pub config_fields: Vec<ConfigField>,
@@ -40,6 +42,7 @@ mod tests {
         let info = PluginInfo {
             name: "test_saver".into(),
             description: "A test screensaver".into(),
+            interactive: true,
             key_bindings: vec![("Space".into(), "Pause".into())],
             features: vec!["Feature A".into()],
             config_fields: vec![ConfigField {
@@ -53,8 +56,17 @@ mod tests {
         let json = serde_json::to_string(&info).unwrap();
         let decoded: PluginInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.name, "test_saver");
+        assert!(decoded.interactive);
         assert_eq!(decoded.config_fields.len(), 1);
         assert_eq!(decoded.config_fields[0].kind, FieldKind::F64);
+    }
+
+    #[test]
+    fn plugin_info_interactive_defaults_false() {
+        let json =
+            r#"{"name":"old","description":"","key_bindings":[],"features":[],"config_fields":[]}"#;
+        let decoded: PluginInfo = serde_json::from_str(json).unwrap();
+        assert!(!decoded.interactive);
     }
 
     #[test]

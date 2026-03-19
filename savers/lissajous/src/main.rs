@@ -1,11 +1,11 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use rand::Rng;
-use serde::Deserialize;
 use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
+use rand::Rng;
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -164,7 +164,7 @@ impl Lissajous {
             return PluginColor::Rgb(255, 255, 255);
         }
         let freshness = index as f64 / total as f64;
-        let brightness = (freshness * 255.0).clamp(30.0, 255.0) as f64 / 255.0;
+        let brightness = (freshness * 255.0).clamp(30.0, 255.0) / 255.0;
 
         match self.color_mode.as_str() {
             "rainbow" => {
@@ -186,6 +186,7 @@ impl ScreensaverPlugin for Lissajous {
         PluginInfo {
             name: "lissajous".into(),
             description: "Lissajous harmonograph with Braille subpixel rendering".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "Braille subpixel rendering".into(),
@@ -320,7 +321,15 @@ impl ScreensaverPlugin for Lissajous {
                 let px = cx as u16;
                 let py = cy as u16;
                 if px < buf.width() && py < buf.height() {
-                    buf.set(px, py, Cell { ch, fg: color, bg: PluginColor::Reset });
+                    buf.set(
+                        px,
+                        py,
+                        Cell {
+                            ch,
+                            fg: color,
+                            bg: PluginColor::Reset,
+                        },
+                    );
                 }
             }
         }
@@ -449,8 +458,7 @@ mod tests {
 
         liss.rebirth();
 
-        let params_changed =
-            (liss.params.a - old_a).abs() > 1e-10
+        let params_changed = (liss.params.a - old_a).abs() > 1e-10
             || (liss.params.b - old_b).abs() > 1e-10
             || (liss.params.delta - old_delta).abs() > 1e-10;
         assert!(params_changed, "Parameters should change after rebirth");
@@ -598,7 +606,8 @@ mod tests {
         let liss = Lissajous::new(config);
         let new_color = liss.trail_color(99, 100);
         let old_color = liss.trail_color(0, 100);
-        if let (PluginColor::Rgb(nr, ng, nb), PluginColor::Rgb(or, og, ob)) = (new_color, old_color) {
+        if let (PluginColor::Rgb(nr, ng, nb), PluginColor::Rgb(or, og, ob)) = (new_color, old_color)
+        {
             let new_brightness = nr as u16 + ng as u16 + nb as u16;
             let old_brightness = or as u16 + og as u16 + ob as u16;
             assert!(

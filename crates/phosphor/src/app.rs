@@ -16,6 +16,7 @@ use crate::ambient::AmbientState;
 use crate::auth;
 use crate::config::Config;
 use crate::fade;
+use crate::filter::FilterState;
 use crate::overlay;
 use crate::plugin_host::PluginRenderer;
 use crate::power;
@@ -41,24 +42,20 @@ struct TerminalGuard;
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
-        let _ = execute!(
-            io::stdout(),
-            LeaveAlternateScreen,
-            crossterm::cursor::Show
-        );
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, crossterm::cursor::Show);
     }
 }
 
 /// Run the screensaver application.
 pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()> {
+    let mut config = config.clone();
     // Select screensaver, checking schedule first
     let screensaver_name = if config.schedule.enabled {
-        scheduled_screensaver(&config.schedule)
-            .unwrap_or(&config.general.default_screensaver)
+        scheduled_screensaver(&config.schedule).unwrap_or(&config.general.default_screensaver)
     } else {
         &config.general.default_screensaver
     };
-    let mut saver = create_plugin(screensaver_name, config);
+    let mut saver = create_plugin(screensaver_name, &config);
 
     // Setup terminal
     enable_raw_mode()?;
@@ -85,12 +82,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
     // Determine FPS
     let base_fps = if config.power.battery_aware {
         let state = power::detect_power_state();
-        power::fps_for_power_state(
-            state,
-            config.power.battery_fps,
-            config.power.ac_fps,
-            true,
-        )
+        power::fps_for_power_state(state, config.power.battery_fps, config.power.ac_fps, true)
     } else {
         config.general.fps
     };
@@ -99,16 +91,19 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
     let mut last_frame = Instant::now();
     let start_time = Instant::now();
     let mut blanked = false;
-    let blank_delay = Duration::from_secs(config.blanking.delay_secs);
+    let mut blank_delay = Duration::from_secs(config.blanking.delay_secs);
+    // Separate timer for blanking — resets on activity (auto-rotate, unblank)
+    // so the screen doesn't permanently blank while content is still changing.
+    let mut blank_timer = Instant::now();
 
     // Auto-rotate state
     let mut rotate_timer = Instant::now();
-    let rotate_interval = Duration::from_secs(config.rotate.interval_secs);
+    let mut rotate_interval = Duration::from_secs(config.rotate.interval_secs);
     let mut rotate_index = 0usize;
 
     // Transition state
-    let transition_style = TransitionStyle::from_name(&config.rotate.transition_style);
-    let transition_duration_ms = config.rotate.transition_duration_ms;
+    let mut transition_style = TransitionStyle::from_name(&config.rotate.transition_style);
+    let mut transition_duration_ms = config.rotate.transition_duration_ms;
     let mut active_transition: Option<Transition> = None;
 
     // Lock mode state
@@ -132,15 +127,18 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
     let mut ambient_check = Instant::now();
     let ambient_check_interval = Duration::from_secs(60);
 
+    // Filter state
+    let mut filter_state = FilterState::new(saver_w, saver_h);
+
     // OSD state (on-screen display for +/- cycling)
     let mut osd_message: Option<(String, Instant)> = None;
 
     'outer: loop {
         // Check for preview timeout
-        if let Some(dur) = preview_duration {
-            if start_time.elapsed() >= dur {
-                break;
-            }
+        if let Some(dur) = preview_duration
+            && start_time.elapsed() >= dur
+        {
+            break;
         }
 
         // Process all pending events within the frame time budget.
@@ -152,13 +150,13 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
             // display sleeps/wakes).  Treat errors as "no event" rather than
             // crashing the screensaver.
             match event::poll(remaining) {
-                Ok(false) => break,  // Frame time elapsed, proceed to render
-                Ok(true) => {}       // Event available, read it below
-                Err(_) => break,     // Transient error, proceed to render
+                Ok(false) => break, // Frame time elapsed, proceed to render
+                Ok(true) => {}      // Event available, read it below
+                Err(_) => break,    // Transient error, proceed to render
             }
             let ev = match event::read() {
                 Ok(ev) => ev,
-                Err(_) => break,     // Transient read error, proceed to render
+                Err(_) => break, // Transient read error, proceed to render
             };
 
             // Handle resize — clear ratatui's buffers so the next draw does
@@ -188,8 +186,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                             if auth::verify_password(&username, &password_buffer) {
                                 break 'outer; // Authenticated — exit screensaver
                             } else {
-                                auth_message =
-                                    Some(("Incorrect password".into(), Instant::now()));
+                                auth_message = Some(("Incorrect password".into(), Instant::now()));
                                 password_buffer.clear();
                             }
                         }
@@ -208,10 +205,10 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                         _ => {}
                     }
                     // Clear auth message after 2 seconds
-                    if let Some((_, t)) = &auth_message {
-                        if t.elapsed() > Duration::from_secs(2) {
-                            auth_message = None;
-                        }
+                    if let Some((_, t)) = &auth_message
+                        && t.elapsed() > Duration::from_secs(2)
+                    {
+                        auth_message = None;
                     }
                     continue; // Keep draining events
                 }
@@ -219,6 +216,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                 // If blanked, unblank on any key
                 if blanked {
                     blanked = false;
+                    blank_timer = Instant::now();
                     let size = terminal.size()?;
                     saver_w = size.width;
                     saver_h = size.height;
@@ -256,7 +254,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                     drop(terminal);
 
                     let menu_result = crate::menu::run(
-                        config,
+                        &config,
                         crate::menu::MenuContext::DuringScreensaver {
                             name: saver.name().to_string(),
                         },
@@ -269,13 +267,31 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
 
                     match menu_result {
                         crate::menu::MenuResult::Resume => {
+                            config = Config::load();
+                            frame_duration =
+                                Duration::from_millis(1000 / config.general.fps.max(1) as u64);
+                            rotate_interval = Duration::from_secs(config.rotate.interval_secs);
+                            transition_style =
+                                TransitionStyle::from_name(&config.rotate.transition_style);
+                            transition_duration_ms = config.rotate.transition_duration_ms;
+                            blank_delay = Duration::from_secs(config.blanking.delay_secs);
+
                             let size = terminal.size()?;
                             saver_w = size.width;
                             saver_h = size.height;
                             saver.init(saver_w, saver_h)?;
                         }
                         crate::menu::MenuResult::Launch(name) => {
-                            saver = create_plugin(&name, config);
+                            config = Config::load();
+                            frame_duration =
+                                Duration::from_millis(1000 / config.general.fps.max(1) as u64);
+                            rotate_interval = Duration::from_secs(config.rotate.interval_secs);
+                            transition_style =
+                                TransitionStyle::from_name(&config.rotate.transition_style);
+                            transition_duration_ms = config.rotate.transition_duration_ms;
+                            blank_delay = Duration::from_secs(config.blanking.delay_secs);
+
+                            saver = create_plugin(&name, &config);
                             let size = terminal.size()?;
                             saver_w = size.width;
                             saver_h = size.height;
@@ -284,6 +300,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                         crate::menu::MenuResult::Quit => break 'outer,
                     }
                     last_frame = Instant::now();
+                    blank_timer = Instant::now();
                     break; // Render immediately after menu
                 }
 
@@ -292,7 +309,10 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                     let plugins = registry::plugins();
                     if plugins.len() > 1 {
                         let current_name = saver.name();
-                        let current_idx = plugins.iter().position(|p| p.name == current_name).unwrap_or(0);
+                        let current_idx = plugins
+                            .iter()
+                            .position(|p| p.name == current_name)
+                            .unwrap_or(0);
                         let next_idx = (current_idx + 1) % plugins.len();
                         // Capture old buffer for transition
                         if transition_style != TransitionStyle::None {
@@ -303,12 +323,17 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                                 buf,
                             ));
                         }
-                        saver = create_plugin(&plugins[next_idx].name, config);
+                        saver = create_plugin(&plugins[next_idx].name, &config);
                         let size = terminal.size()?;
                         saver_w = size.width;
                         saver_h = size.height;
                         saver.init(saver_w, saver_h)?;
+                        // Pre-warm: ensure the subprocess has produced its first frame
+                        // before the transition blends into it (avoids black flash).
+                        let _ = saver.update(Duration::ZERO);
+                        let _ = saver.render_to_buffer();
                         rotate_timer = Instant::now();
+                        blank_timer = Instant::now();
                         osd_message = Some((plugins[next_idx].name.clone(), Instant::now()));
                     }
                     break; // Render immediately to show new screensaver
@@ -317,8 +342,15 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                     let plugins = registry::plugins();
                     if plugins.len() > 1 {
                         let current_name = saver.name();
-                        let current_idx = plugins.iter().position(|p| p.name == current_name).unwrap_or(0);
-                        let prev_idx = if current_idx == 0 { plugins.len() - 1 } else { current_idx - 1 };
+                        let current_idx = plugins
+                            .iter()
+                            .position(|p| p.name == current_name)
+                            .unwrap_or(0);
+                        let prev_idx = if current_idx == 0 {
+                            plugins.len() - 1
+                        } else {
+                            current_idx - 1
+                        };
                         if transition_style != TransitionStyle::None {
                             let buf = terminal.current_buffer_mut();
                             active_transition = Some(Transition::new(
@@ -327,25 +359,30 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                                 buf,
                             ));
                         }
-                        saver = create_plugin(&plugins[prev_idx].name, config);
+                        saver = create_plugin(&plugins[prev_idx].name, &config);
                         let size = terminal.size()?;
                         saver_w = size.width;
                         saver_h = size.height;
                         saver.init(saver_w, saver_h)?;
+                        // Pre-warm: ensure the subprocess has produced its first frame
+                        // before the transition blends into it (avoids black flash).
+                        let _ = saver.update(Duration::ZERO);
+                        let _ = saver.render_to_buffer();
                         rotate_timer = Instant::now();
+                        blank_timer = Instant::now();
                         osd_message = Some((plugins[prev_idx].name.clone(), Instant::now()));
                     }
                     break; // Render immediately to show new screensaver
                 }
 
-                // Non-locked mode: Escape and 'q' always exit
+                // Non-locked mode: Escape and Enter always exit
                 if matches!(
                     key_event,
                     KeyEvent {
                         code: KeyCode::Esc,
                         ..
                     } | KeyEvent {
-                        code: KeyCode::Char('q'),
+                        code: KeyCode::Enter,
                         ..
                     }
                 ) {
@@ -355,8 +392,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                 // Let the screensaver handle the event
                 match saver.handle_event(&ev)? {
                     EventResponse::Exit => break 'outer,
-                    EventResponse::Continue => {}
-                    EventResponse::Ignored => break 'outer, // Any unhandled key exits
+                    EventResponse::Continue | EventResponse::Ignored => {}
                 }
             }
         }
@@ -380,7 +416,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
         }
 
         // Screen blanking
-        if config.blanking.enabled && !blanked && start_time.elapsed() >= blank_delay {
+        if config.blanking.enabled && !blanked && blank_timer.elapsed() >= blank_delay {
             blanked = true;
             let _ = terminal.draw(|_frame| {});
             continue;
@@ -399,15 +435,16 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
         saver.update(effective_dt)?;
 
         // Update active transition
-        if let Some(ref mut trans) = active_transition {
-            if !trans.update(dt.as_secs_f64()) {
-                active_transition = None;
-            }
+        if let Some(ref mut trans) = active_transition
+            && !trans.update(dt.as_secs_f64())
+        {
+            active_transition = None;
         }
 
         // Auto-rotate
         if config.rotate.enabled && rotate_timer.elapsed() >= rotate_interval {
             rotate_timer = Instant::now();
+            blank_timer = Instant::now();
             let rotate_list = &config.rotate.screensavers;
             if !rotate_list.is_empty() {
                 rotate_index = (rotate_index + 1) % rotate_list.len();
@@ -421,11 +458,15 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                     ));
                 }
 
-                saver = create_plugin(&rotate_list[rotate_index], config);
+                saver = create_plugin(&rotate_list[rotate_index], &config);
                 let size = terminal.size()?;
                 saver_w = size.width;
                 saver_h = size.height;
                 saver.init(saver_w, saver_h)?;
+                // Pre-warm: ensure the subprocess has produced its first frame
+                // before the transition blends into it (avoids black flash).
+                let _ = saver.update(Duration::ZERO);
+                let _ = saver.render_to_buffer();
             }
         }
 
@@ -449,28 +490,28 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
         }
 
         // Clear expired auth message
-        if let Some((_, t)) = &auth_message {
-            if t.elapsed() > Duration::from_secs(2) {
-                auth_message = None;
-            }
+        if let Some((_, t)) = &auth_message
+            && t.elapsed() > Duration::from_secs(2)
+        {
+            auth_message = None;
         }
 
         // Clear expired OSD message
-        if let Some((_, t)) = &osd_message {
-            if t.elapsed() > Duration::from_secs(2) {
-                osd_message = None;
-            }
+        if let Some((_, t)) = &osd_message
+            && t.elapsed() > Duration::from_secs(2)
+        {
+            osd_message = None;
         }
 
         // Catch terminal size changes that bypass Event::Resize (e.g. ratatui autoresize).
         // Without this, the frame buffer can silently grow larger than the plugin buffer,
         // leaving the right/bottom edge cells unwritten and causing them to flash.
-        if let Ok((term_w, term_h)) = crossterm::terminal::size() {
-            if term_w != saver_w || term_h != saver_h {
-                saver_w = term_w;
-                saver_h = term_h;
-                saver.init(saver_w, saver_h)?;
-            }
+        if let Ok((term_w, term_h)) = crossterm::terminal::size()
+            && (term_w != saver_w || term_h != saver_h)
+        {
+            saver_w = term_w;
+            saver_h = term_h;
+            saver.init(saver_w, saver_h)?;
         }
 
         // Render (synchronized output prevents tearing from partial frame writes).
@@ -484,6 +525,7 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
         let trans_ref = &active_transition;
         let ambient_ref = &ambient;
         let saver_ref = &mut saver;
+        let filter_ref = &mut filter_state;
         let osd_ref = &osd_message;
         let _ = terminal.draw(|frame| {
             let _ = saver_ref.render_frame(frame);
@@ -500,6 +542,9 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
                     cell.bg = ambient_ref.apply_ratatui_color(cell.bg);
                 }
             }
+
+            // Apply visual filters (after ambient, before overlays)
+            filter_ref.apply(frame.buffer_mut(), &config.filter);
 
             overlay::render_clock(frame, &config.overlay);
             overlay::render_info(frame, &config.overlay);
@@ -519,9 +564,9 @@ pub fn run(config: &Config, preview_duration: Option<Duration>) -> io::Result<()
             let area = frame.area();
             let last_x = area.width.saturating_sub(1);
             let last_y = area.height.saturating_sub(1);
-            frame.buffer_mut().cell_mut((last_x, last_y)).map(|c| {
+            if let Some(c) = frame.buffer_mut().cell_mut((last_x, last_y)) {
                 c.reset();
-            });
+            }
         });
         let _ = execute!(terminal.backend_mut(), EndSynchronizedUpdate);
     }

@@ -3,6 +3,9 @@ name = "phosphor-plugin"
 version = "0.1.0"
 edition = "2024"
 description = "SDK for building phosphor screensaver plugins"
+authors = ["Colin Campbell <colinc86@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/colinc86/phosphor"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

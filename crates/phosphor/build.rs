@@ -7,10 +7,7 @@ fn main() {
         println!("cargo:rustc-link-search=native=/usr/lib");
 
         // Check if libpam.so exists; if not, try the versioned name
-        let paths = [
-            "/usr/lib/x86_64-linux-gnu/libpam.so",
-            "/usr/lib/libpam.so",
-        ];
+        let paths = ["/usr/lib/x86_64-linux-gnu/libpam.so", "/usr/lib/libpam.so"];
         let has_unversioned = paths.iter().any(|p| std::path::Path::new(p).exists());
 
         if !has_unversioned {

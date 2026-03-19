@@ -1,11 +1,10 @@
 use std::f64::consts::PI;
 use std::time::Duration;
 
-use serde::Deserialize;
 use phosphor_plugin::{
-    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
-    ScreensaverPlugin,
+    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -123,7 +122,15 @@ impl AnalogClock {
 
     fn set_cell(&self, buf: &mut PluginBuffer, x: i32, y: i32, ch: char, color: PluginColor) {
         if x >= 0 && x < buf.width() as i32 && y >= 0 && y < buf.height() as i32 {
-            buf.set(x as u16, y as u16, Cell { ch, fg: color, bg: PluginColor::Reset });
+            buf.set(
+                x as u16,
+                y as u16,
+                Cell {
+                    ch,
+                    fg: color,
+                    bg: PluginColor::Reset,
+                },
+            );
         }
     }
 }
@@ -133,6 +140,7 @@ impl ScreensaverPlugin for AnalogClock {
         PluginInfo {
             name: "analog_clock".into(),
             description: "An analog clock face with hour, minute, and second hands".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "Circular clock face with trig rendering".into(),
@@ -269,7 +277,7 @@ impl ScreensaverPlugin for AnalogClock {
             format!("{:02}:{:02}", self.hour, self.minute)
         };
         let time_x = cx - (time_str.len() as i32 / 2);
-        let time_y = cy + radius as i32 + 2;
+        let time_y = cy + radius + 2;
         if time_y >= 0 && time_y < h as i32 {
             for (i, ch) in time_str.chars().enumerate() {
                 let x = time_x + i as i32;

@@ -31,6 +31,16 @@ pub fn run(shell_pid: u32, timeout: u64, _config: &Config) -> io::Result<()> {
     // by checking the sysctl. If it fails on first real use, we exit.
 
     loop {
+        // Re-read config to pick up enable/disable changes
+        let live_config = Config::load();
+        if !live_config.general.enabled {
+            std::thread::sleep(Duration::from_secs(5));
+            if unsafe { libc::kill(shell_pid as libc::pid_t, 0) } != 0 {
+                break;
+            }
+            continue;
+        }
+
         let idle_secs = heartbeat_idle_secs(&heartbeat_path).unwrap_or(0);
         if idle_secs < timeout {
             let remaining = timeout - idle_secs;
@@ -56,8 +66,10 @@ pub fn run(shell_pid: u32, timeout: u64, _config: &Config) -> io::Result<()> {
         if inject_input(tty_fd, b" phosphor run\n").is_err() {
             // TIOCSTI not available — exit gracefully
             #[cfg(target_os = "linux")]
-            eprintln!("phosphor: TIOCSTI ioctl not available. \
-                Enable with: sudo sysctl dev.tty.legacy_tiocsti=1");
+            eprintln!(
+                "phosphor: TIOCSTI ioctl not available. \
+                Enable with: sudo sysctl dev.tty.legacy_tiocsti=1"
+            );
             #[cfg(not(target_os = "linux"))]
             eprintln!("phosphor: TIOCSTI ioctl not available.");
             break;

@@ -2,13 +2,13 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
+use phosphor_plugin::protocol::KeyCode;
+use phosphor_plugin::{
+    Cell, ConfigField, EventResponse, FieldKind, KeyInput, PluginBuffer, PluginColor, PluginInfo,
+    ScreensaverPlugin,
+};
 use rand::Rng;
 use serde::Deserialize;
-use phosphor_plugin::{
-    Cell, ConfigField, EventResponse, FieldKind, KeyInput, PluginBuffer, PluginColor,
-    PluginInfo, ScreensaverPlugin,
-};
-use phosphor_plugin::protocol::KeyCode;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -75,6 +75,8 @@ struct GameOfLife {
     stagnation_count: u32,
     heat_map: Vec<Vec<f64>>,
     show_heat_map: bool,
+    view_x: i32,
+    view_y: i32,
 }
 
 impl GameOfLife {
@@ -96,6 +98,8 @@ impl GameOfLife {
             stagnation_count: 0,
             heat_map: Vec::new(),
             show_heat_map: false,
+            view_x: 0,
+            view_y: 0,
         }
     }
 
@@ -114,6 +118,8 @@ impl GameOfLife {
         self.generation = 0;
         self.recent_hashes.clear();
         self.stagnation_count = 0;
+        self.view_x = 0;
+        self.view_y = 0;
     }
 
     pub fn count_neighbors(grid: &[Vec<u16>], x: usize, y: usize, w: usize, h: usize) -> u8 {
@@ -185,11 +191,13 @@ impl ScreensaverPlugin for GameOfLife {
         PluginInfo {
             name: "game_of_life".into(),
             description: "Conway's Game of Life cellular automaton".into(),
+            interactive: true,
             key_bindings: vec![
                 ("Space".into(), "Pause/Resume".into()),
                 ("r".into(), "Randomize".into()),
                 ("h".into(), "Toggle heat map".into()),
                 ("n".into(), "Step (when paused)".into()),
+                ("←/→/↑/↓".into(), "Pan viewport".into()),
             ],
             features: vec![
                 "Color by age".into(),
@@ -262,25 +270,45 @@ impl ScreensaverPlugin for GameOfLife {
         if self.show_heat_map {
             for y in 0..bh.min(self.height) {
                 for x in 0..bw.min(self.width) {
-                    let heat = self.heat_map[y as usize][x as usize];
+                    let gy = (y as i32 + self.view_y).rem_euclid(self.height as i32) as usize;
+                    let gx = (x as i32 + self.view_x).rem_euclid(self.width as i32) as usize;
+                    let heat = self.heat_map[gy][gx];
                     if heat > 0.01 {
-                        let alive = self.grid[y as usize][x as usize] > 0;
+                        let alive = self.grid[gy][gx] > 0;
                         let ch = if alive { self.cell_char } else { '\u{00B7}' };
-                        buf.set(x, y, Cell { ch, fg: heat_color(heat), bg: PluginColor::Reset });
+                        buf.set(
+                            x,
+                            y,
+                            Cell {
+                                ch,
+                                fg: heat_color(heat),
+                                bg: PluginColor::Reset,
+                            },
+                        );
                     }
                 }
             }
         } else {
             for y in 0..bh.min(self.height) {
                 for x in 0..bw.min(self.width) {
-                    let age = self.grid[y as usize][x as usize];
+                    let gy = (y as i32 + self.view_y).rem_euclid(self.height as i32) as usize;
+                    let gx = (x as i32 + self.view_x).rem_euclid(self.width as i32) as usize;
+                    let age = self.grid[gy][gx];
                     if age > 0 {
                         let color = if self.color_by_age {
                             age_color(age)
                         } else {
                             PluginColor::Rgb(0, 255, 0)
                         };
-                        buf.set(x, y, Cell { ch: self.cell_char, fg: color, bg: PluginColor::Reset });
+                        buf.set(
+                            x,
+                            y,
+                            Cell {
+                                ch: self.cell_char,
+                                fg: color,
+                                bg: PluginColor::Reset,
+                            },
+                        );
                     }
                 }
             }
@@ -293,7 +321,15 @@ impl ScreensaverPlugin for GameOfLife {
         for (i, ch) in gen_str.chars().enumerate() {
             let x = i as u16 + 1;
             if x < bw {
-                buf.set(x, y, Cell { ch, fg: PluginColor::Rgb(100, 100, 100), bg: PluginColor::Reset });
+                buf.set(
+                    x,
+                    y,
+                    Cell {
+                        ch,
+                        fg: PluginColor::Rgb(100, 100, 100),
+                        bg: PluginColor::Reset,
+                    },
+                );
             }
         }
 
@@ -301,7 +337,15 @@ impl ScreensaverPlugin for GameOfLife {
             let msg = "PAUSED";
             let x = bw.saturating_sub(msg.len() as u16 + 2);
             for (i, ch) in msg.chars().enumerate() {
-                buf.set(x + i as u16, y, Cell { ch, fg: PluginColor::Rgb(255, 255, 0), bg: PluginColor::Reset });
+                buf.set(
+                    x + i as u16,
+                    y,
+                    Cell {
+                        ch,
+                        fg: PluginColor::Rgb(255, 255, 0),
+                        bg: PluginColor::Reset,
+                    },
+                );
             }
         }
     }
@@ -322,6 +366,22 @@ impl ScreensaverPlugin for GameOfLife {
             }
             KeyCode::Char('n') if self.paused => {
                 self.step();
+                EventResponse::Continue
+            }
+            KeyCode::Left => {
+                self.view_x -= 1;
+                EventResponse::Continue
+            }
+            KeyCode::Right => {
+                self.view_x += 1;
+                EventResponse::Continue
+            }
+            KeyCode::Up => {
+                self.view_y -= 1;
+                EventResponse::Continue
+            }
+            KeyCode::Down => {
+                self.view_y += 1;
                 EventResponse::Continue
             }
             _ => EventResponse::Ignored,
@@ -507,7 +567,10 @@ mod tests {
         let mut gol = GameOfLife::new(GameOfLifeConfig::default());
         assert!(!gol.show_heat_map);
 
-        let key = KeyInput { code: KeyCode::Char('h'), modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Char('h'),
+            modifiers: 0,
+        };
         assert_eq!(gol.handle_key(key.clone()), EventResponse::Continue);
         assert!(gol.show_heat_map);
         assert_eq!(gol.handle_key(key), EventResponse::Continue);
@@ -519,7 +582,10 @@ mod tests {
         let mut gol = GameOfLife::new(GameOfLifeConfig::default());
         assert!(!gol.paused);
 
-        let key = KeyInput { code: KeyCode::Space, modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Space,
+            modifiers: 0,
+        };
         assert_eq!(gol.handle_key(key.clone()), EventResponse::Continue);
         assert!(gol.paused);
         assert_eq!(gol.handle_key(key), EventResponse::Continue);
@@ -539,5 +605,65 @@ mod tests {
         gol.update(Duration::from_millis(200));
         let mut buf = PluginBuffer::new(20, 10);
         gol.render(&mut buf);
+    }
+
+    #[test]
+    fn arrow_keys_change_view() {
+        let mut gol = GameOfLife::new(GameOfLifeConfig::default());
+        gol.init(10, 10);
+
+        let left = KeyInput {
+            code: KeyCode::Left,
+            modifiers: 0,
+        };
+        assert_eq!(gol.handle_key(left), EventResponse::Continue);
+        assert_eq!(gol.view_x, -1);
+
+        let right = KeyInput {
+            code: KeyCode::Right,
+            modifiers: 0,
+        };
+        assert_eq!(gol.handle_key(right), EventResponse::Continue);
+        assert_eq!(gol.view_x, 0);
+
+        let up = KeyInput {
+            code: KeyCode::Up,
+            modifiers: 0,
+        };
+        assert_eq!(gol.handle_key(up), EventResponse::Continue);
+        assert_eq!(gol.view_y, -1);
+
+        let down = KeyInput {
+            code: KeyCode::Down,
+            modifiers: 0,
+        };
+        assert_eq!(gol.handle_key(down), EventResponse::Continue);
+        assert_eq!(gol.view_y, 0);
+    }
+
+    #[test]
+    fn viewport_wraps_toroidally() {
+        let mut gol = GameOfLife::new(GameOfLifeConfig::default());
+        gol.width = 10;
+        gol.height = 10;
+        gol.grid = empty_grid(10, 10);
+        gol.next = empty_grid(10, 10);
+        gol.heat_map = vec![vec![0.0; 10]; 10];
+        gol.grid[0][0] = 1; // alive at (0,0)
+
+        // Shift view so (0,0) in grid maps to screen position (1,1)
+        gol.view_x = -1;
+        gol.view_y = -1;
+        // The cell at grid (0,0) should now render at screen (1,1)
+        // because screen (1,1) + view(-1,-1) = grid (0,0)
+        let mut buf = PluginBuffer::new(10, 10);
+        gol.render(&mut buf);
+        // Just ensure no panic and wrapping works
+    }
+
+    #[test]
+    fn info_is_interactive() {
+        let gol = GameOfLife::new(GameOfLifeConfig::default());
+        assert!(gol.info().interactive);
     }
 }

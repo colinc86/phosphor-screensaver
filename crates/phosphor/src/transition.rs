@@ -55,7 +55,8 @@ impl Transition {
         for y in 0..height {
             for x in 0..width {
                 if let Some(cell) = old_buffer.cell((x, y)) {
-                    old_cells[y as usize][x as usize] = (cell.symbol().chars().next().unwrap_or(' '), cell.style());
+                    old_cells[y as usize][x as usize] =
+                        (cell.symbol().chars().next().unwrap_or(' '), cell.style());
                 }
             }
         }
@@ -69,9 +70,7 @@ impl Transition {
         }
 
         // Melt offsets: random start delay per column
-        let melt_offsets: Vec<f64> = (0..width)
-            .map(|_| rng.random_range(0.0..0.4))
-            .collect();
+        let melt_offsets: Vec<f64> = (0..width).map(|_| rng.random_range(0.0..0.4)).collect();
 
         Self {
             style,
@@ -124,10 +123,10 @@ impl Transition {
                 if !revealed[idx] {
                     // Show old content
                     let (ch, style) = self.old_cells[y as usize][x as usize];
-                    buf.cell_mut((x, y)).map(|cell| {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
                         cell.set_char(ch);
                         cell.set_style(style);
-                    });
+                    }
                 }
             }
         }
@@ -138,11 +137,13 @@ impl Transition {
         let offset = (self.progress * self.width as f64) as u16;
 
         // Copy current (new) buffer content
-        let mut new_cells = vec![vec![(' ', Style::default()); self.width as usize]; self.height as usize];
+        let mut new_cells =
+            vec![vec![(' ', Style::default()); self.width as usize]; self.height as usize];
         for y in 0..self.height {
             for x in 0..self.width {
                 if let Some(cell) = buf.cell((x, y)) {
-                    new_cells[y as usize][x as usize] = (cell.symbol().chars().next().unwrap_or(' '), cell.style());
+                    new_cells[y as usize][x as usize] =
+                        (cell.symbol().chars().next().unwrap_or(' '), cell.style());
                 }
             }
         }
@@ -154,10 +155,10 @@ impl Transition {
                     let old_x = x as usize + offset as usize;
                     if old_x < self.width as usize {
                         let (ch, style) = self.old_cells[y as usize][old_x];
-                        buf.cell_mut((x, y)).map(|cell| {
+                        if let Some(cell) = buf.cell_mut((x, y)) {
                             cell.set_char(ch);
                             cell.set_style(style);
-                        });
+                        }
                     }
                 }
                 // else: new content (already in buffer from render)
@@ -168,7 +169,8 @@ impl Transition {
     fn apply_melt(&self, buf: &mut Buffer) {
         // Each column "drips" downward at a random start time
         for x in 0..self.width as usize {
-            let col_progress = (self.progress - self.melt_offsets[x]).max(0.0) / (1.0 - self.melt_offsets[x]).max(0.001);
+            let col_progress = (self.progress - self.melt_offsets[x]).max(0.0)
+                / (1.0 - self.melt_offsets[x]).max(0.001);
             let col_progress = col_progress.clamp(0.0, 1.0);
             let drop = (col_progress * self.height as f64) as usize;
 
@@ -181,10 +183,10 @@ impl Transition {
                 let old_y = y - drop;
                 if old_y < self.height as usize {
                     let (ch, style) = self.old_cells[old_y][x];
-                    buf.cell_mut((x as u16, y as u16)).map(|cell| {
+                    if let Some(cell) = buf.cell_mut((x as u16, y as u16)) {
                         cell.set_char(ch);
                         cell.set_style(style);
-                    });
+                    }
                 }
             }
         }
@@ -201,9 +203,9 @@ mod tests {
         let mut buf = Buffer::empty(area);
         for y in 0..h {
             for x in 0..w {
-                buf.cell_mut((x, y)).map(|cell| {
+                if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_char(ch);
-                });
+                }
             }
         }
         buf
@@ -211,11 +213,17 @@ mod tests {
 
     #[test]
     fn transition_style_from_name() {
-        assert_eq!(TransitionStyle::from_name("dissolve"), TransitionStyle::Dissolve);
+        assert_eq!(
+            TransitionStyle::from_name("dissolve"),
+            TransitionStyle::Dissolve
+        );
         assert_eq!(TransitionStyle::from_name("slide"), TransitionStyle::Slide);
         assert_eq!(TransitionStyle::from_name("melt"), TransitionStyle::Melt);
         assert_eq!(TransitionStyle::from_name("none"), TransitionStyle::None);
-        assert_eq!(TransitionStyle::from_name("unknown"), TransitionStyle::Dissolve);
+        assert_eq!(
+            TransitionStyle::from_name("unknown"),
+            TransitionStyle::Dissolve
+        );
     }
 
     #[test]
@@ -245,7 +253,13 @@ mod tests {
         // All cells should be 'A' since nothing has flipped yet
         for y in 0..5u16 {
             for x in 0..10u16 {
-                let sym = new_buf.cell((x, y)).unwrap().symbol().chars().next().unwrap();
+                let sym = new_buf
+                    .cell((x, y))
+                    .unwrap()
+                    .symbol()
+                    .chars()
+                    .next()
+                    .unwrap();
                 assert_eq!(sym, 'A');
             }
         }
@@ -259,8 +273,20 @@ mod tests {
         let mut new_buf = test_buffer(10, 5, 'B');
         t.apply(&mut new_buf);
         // Left half should have old, right half should have new
-        let left = new_buf.cell((0, 0)).unwrap().symbol().chars().next().unwrap();
-        let right = new_buf.cell((9, 0)).unwrap().symbol().chars().next().unwrap();
+        let left = new_buf
+            .cell((0, 0))
+            .unwrap()
+            .symbol()
+            .chars()
+            .next()
+            .unwrap();
+        let right = new_buf
+            .cell((9, 0))
+            .unwrap()
+            .symbol()
+            .chars()
+            .next()
+            .unwrap();
         assert_eq!(left, 'A');
         assert_eq!(right, 'B');
     }

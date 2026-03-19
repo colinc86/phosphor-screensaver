@@ -13,7 +13,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::config::Config;
+use crate::config::{ColorFilterMode, Config};
 use crate::registry;
 use crate::theme::Theme;
 
@@ -32,6 +32,7 @@ pub enum MenuContext {
 enum Tab {
     Screensavers,
     Settings,
+    Filters,
     Help,
     About,
 }
@@ -39,6 +40,7 @@ enum Tab {
 const TABS: &[(Tab, &str)] = &[
     (Tab::Screensavers, "Screensavers"),
     (Tab::Settings, "Settings"),
+    (Tab::Filters, "Filters"),
     (Tab::Help, "Help"),
     (Tab::About, "About"),
 ];
@@ -67,6 +69,10 @@ struct MenuUI {
     setting_cursor: usize,
     setting_editing: bool,
     setting_buffer: String,
+    // Filters tab
+    filter_cursor: usize,
+    filter_editing: bool,
+    filter_buffer: String,
     // Help tab
     help_scroll: u16,
     // General
@@ -88,6 +94,9 @@ impl MenuUI {
             setting_cursor: 0,
             setting_editing: false,
             setting_buffer: String::new(),
+            filter_cursor: 0,
+            filter_editing: false,
+            filter_buffer: String::new(),
             help_scroll: 0,
             message: None,
             result: None,
@@ -97,7 +106,8 @@ impl MenuUI {
     fn next_tab(&mut self) {
         self.tab = match self.tab {
             Tab::Screensavers => Tab::Settings,
-            Tab::Settings => Tab::Help,
+            Tab::Settings => Tab::Filters,
+            Tab::Filters => Tab::Help,
             Tab::Help => Tab::About,
             Tab::About => Tab::Screensavers,
         };
@@ -107,7 +117,8 @@ impl MenuUI {
         self.tab = match self.tab {
             Tab::Screensavers => Tab::About,
             Tab::Settings => Tab::Screensavers,
-            Tab::Help => Tab::Settings,
+            Tab::Filters => Tab::Settings,
+            Tab::Help => Tab::Filters,
             Tab::About => Tab::Help,
         };
     }
@@ -116,63 +127,237 @@ impl MenuUI {
 
     fn setting_entries(&self) -> Vec<SettingEntry> {
         let c = &self.config;
-        let mut saver_names: Vec<String> = registry::plugins().iter().map(|p| p.name.clone()).collect();
+        let mut saver_names: Vec<String> =
+            registry::plugins().iter().map(|p| p.name.clone()).collect();
         saver_names.push("random".into());
         let theme_names: Vec<String> = Theme::available().iter().map(|s| s.to_string()).collect();
-        let positions = vec!["top-left".into(), "top-right".into(), "bottom-left".into(), "bottom-right".into()];
-        let transitions = vec!["dissolve".into(), "slide".into(), "melt".into(), "none".into()];
+        let positions = vec![
+            "top-left".into(),
+            "top-right".into(),
+            "bottom-left".into(),
+            "bottom-right".into(),
+        ];
+        let transitions = vec![
+            "dissolve".into(),
+            "slide".into(),
+            "melt".into(),
+            "none".into(),
+        ];
 
         vec![
             SettingEntry::Header("General"),
-            SettingEntry::Setting { label: "Timeout (seconds)", value: c.general.timeout.to_string(), kind: EditKind::U64, choices: None },
-            SettingEntry::Setting { label: "FPS", value: c.general.fps.to_string(), kind: EditKind::U32, choices: None },
-            SettingEntry::Setting { label: "Default Screensaver", value: c.general.default_screensaver.clone(), kind: EditKind::Text, choices: Some(saver_names.clone()) },
-            SettingEntry::Setting { label: "Fade Enabled", value: c.general.fade_enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Fade Duration (ms)", value: c.general.fade_duration_ms.to_string(), kind: EditKind::U64, choices: None },
-            SettingEntry::Setting { label: "Ambient Enabled", value: c.general.ambient_enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Ambient Intensity", value: format!("{:.2}", c.general.ambient_intensity), kind: EditKind::F64, choices: None },
-
+            SettingEntry::Setting {
+                label: "Enabled",
+                value: c.general.enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Timeout (seconds)",
+                value: c.general.timeout.to_string(),
+                kind: EditKind::U64,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "FPS",
+                value: c.general.fps.to_string(),
+                kind: EditKind::U32,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Default Screensaver",
+                value: c.general.default_screensaver.clone(),
+                kind: EditKind::Text,
+                choices: Some(saver_names.clone()),
+            },
+            SettingEntry::Setting {
+                label: "Fade Enabled",
+                value: c.general.fade_enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Fade Duration (ms)",
+                value: c.general.fade_duration_ms.to_string(),
+                kind: EditKind::U64,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Ambient Enabled",
+                value: c.general.ambient_enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Ambient Intensity",
+                value: format!("{:.2}", c.general.ambient_intensity),
+                kind: EditKind::F64,
+                choices: None,
+            },
             SettingEntry::Header("Clock Overlay"),
-            SettingEntry::Setting { label: "Enabled", value: c.overlay.clock.enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Position", value: c.overlay.clock.position.clone(), kind: EditKind::Text, choices: Some(positions.clone()) },
-            SettingEntry::Setting { label: "Format", value: c.overlay.clock.format.clone(), kind: EditKind::Text, choices: None },
-            SettingEntry::Setting { label: "Show Seconds", value: c.overlay.clock.show_seconds.to_string(), kind: EditKind::Bool, choices: None },
-
+            SettingEntry::Setting {
+                label: "Enabled",
+                value: c.overlay.clock.enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Position",
+                value: c.overlay.clock.position.clone(),
+                kind: EditKind::Text,
+                choices: Some(positions.clone()),
+            },
+            SettingEntry::Setting {
+                label: "Format",
+                value: c.overlay.clock.format.clone(),
+                kind: EditKind::Text,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Show Seconds",
+                value: c.overlay.clock.show_seconds.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
             SettingEntry::Header("Info Overlay"),
-            SettingEntry::Setting { label: "Enabled", value: c.overlay.info.enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Show CWD", value: c.overlay.info.show_cwd.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Show Hostname", value: c.overlay.info.show_hostname.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Position", value: c.overlay.info.position.clone(), kind: EditKind::Text, choices: Some(positions.clone()) },
-
+            SettingEntry::Setting {
+                label: "Enabled",
+                value: c.overlay.info.enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Show CWD",
+                value: c.overlay.info.show_cwd.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Show Hostname",
+                value: c.overlay.info.show_hostname.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Position",
+                value: c.overlay.info.position.clone(),
+                kind: EditKind::Text,
+                choices: Some(positions.clone()),
+            },
             SettingEntry::Header("Lock"),
-            SettingEntry::Setting { label: "Enabled", value: c.overlay.lock.enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Message", value: c.overlay.lock.message.clone(), kind: EditKind::Text, choices: None },
-            SettingEntry::Setting { label: "Password Required", value: c.overlay.lock.password_required.to_string(), kind: EditKind::Bool, choices: None },
-
+            SettingEntry::Setting {
+                label: "Enabled",
+                value: c.overlay.lock.enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Message",
+                value: c.overlay.lock.message.clone(),
+                kind: EditKind::Text,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Password Required",
+                value: c.overlay.lock.password_required.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
             SettingEntry::Header("Screen Blanking"),
-            SettingEntry::Setting { label: "Enabled", value: c.blanking.enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Delay (seconds)", value: c.blanking.delay_secs.to_string(), kind: EditKind::U64, choices: None },
-
+            SettingEntry::Setting {
+                label: "Enabled",
+                value: c.blanking.enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Delay (seconds)",
+                value: c.blanking.delay_secs.to_string(),
+                kind: EditKind::U64,
+                choices: None,
+            },
             SettingEntry::Header("Auto-Rotate"),
-            SettingEntry::Setting { label: "Enabled", value: c.rotate.enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Interval (seconds)", value: c.rotate.interval_secs.to_string(), kind: EditKind::U64, choices: None },
-            SettingEntry::Setting { label: "Transition Style", value: c.rotate.transition_style.clone(), kind: EditKind::Text, choices: Some(transitions) },
-            SettingEntry::Setting { label: "Transition Duration (ms)", value: c.rotate.transition_duration_ms.to_string(), kind: EditKind::U64, choices: None },
-
+            SettingEntry::Setting {
+                label: "Enabled",
+                value: c.rotate.enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Interval (seconds)",
+                value: c.rotate.interval_secs.to_string(),
+                kind: EditKind::U64,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Transition Style",
+                value: c.rotate.transition_style.clone(),
+                kind: EditKind::Text,
+                choices: Some(transitions),
+            },
+            SettingEntry::Setting {
+                label: "Transition Duration (ms)",
+                value: c.rotate.transition_duration_ms.to_string(),
+                kind: EditKind::U64,
+                choices: None,
+            },
             SettingEntry::Header("Power"),
-            SettingEntry::Setting { label: "Battery Aware", value: c.power.battery_aware.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Battery FPS", value: c.power.battery_fps.to_string(), kind: EditKind::U32, choices: None },
-            SettingEntry::Setting { label: "AC FPS", value: c.power.ac_fps.to_string(), kind: EditKind::U32, choices: None },
-
+            SettingEntry::Setting {
+                label: "Battery Aware",
+                value: c.power.battery_aware.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Battery FPS",
+                value: c.power.battery_fps.to_string(),
+                kind: EditKind::U32,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "AC FPS",
+                value: c.power.ac_fps.to_string(),
+                kind: EditKind::U32,
+                choices: None,
+            },
             SettingEntry::Header("Schedule"),
-            SettingEntry::Setting { label: "Enabled", value: c.schedule.enabled.to_string(), kind: EditKind::Bool, choices: None },
-            SettingEntry::Setting { label: "Morning (6am-12pm)", value: c.schedule.morning.clone(), kind: EditKind::Text, choices: Some(saver_names.clone()) },
-            SettingEntry::Setting { label: "Afternoon (12pm-6pm)", value: c.schedule.afternoon.clone(), kind: EditKind::Text, choices: Some(saver_names.clone()) },
-            SettingEntry::Setting { label: "Evening (6pm-10pm)", value: c.schedule.evening.clone(), kind: EditKind::Text, choices: Some(saver_names.clone()) },
-            SettingEntry::Setting { label: "Night (10pm-6am)", value: c.schedule.night.clone(), kind: EditKind::Text, choices: Some(saver_names) },
-
+            SettingEntry::Setting {
+                label: "Enabled",
+                value: c.schedule.enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Morning (6am-12pm)",
+                value: c.schedule.morning.clone(),
+                kind: EditKind::Text,
+                choices: Some(saver_names.clone()),
+            },
+            SettingEntry::Setting {
+                label: "Afternoon (12pm-6pm)",
+                value: c.schedule.afternoon.clone(),
+                kind: EditKind::Text,
+                choices: Some(saver_names.clone()),
+            },
+            SettingEntry::Setting {
+                label: "Evening (6pm-10pm)",
+                value: c.schedule.evening.clone(),
+                kind: EditKind::Text,
+                choices: Some(saver_names.clone()),
+            },
+            SettingEntry::Setting {
+                label: "Night (10pm-6am)",
+                value: c.schedule.night.clone(),
+                kind: EditKind::Text,
+                choices: Some(saver_names),
+            },
             SettingEntry::Header("Theme"),
-            SettingEntry::Setting { label: "Name", value: c.theme.name.clone(), kind: EditKind::Text, choices: Some(theme_names) },
+            SettingEntry::Setting {
+                label: "Name",
+                value: c.theme.name.clone(),
+                kind: EditKind::Text,
+                choices: Some(theme_names),
+            },
         ]
     }
 
@@ -181,47 +366,84 @@ impl MenuUI {
         let c = &mut self.config;
         match flat_idx {
             // General
-            0 => { if let Ok(v) = value.parse() { c.general.timeout = v; } }
-            1 => { if let Ok(v) = value.parse() { c.general.fps = v; } }
-            2 => c.general.default_screensaver = value.to_string(),
-            3 => c.general.fade_enabled = !c.general.fade_enabled,
-            4 => { if let Ok(v) = value.parse() { c.general.fade_duration_ms = v; } }
-            5 => c.general.ambient_enabled = !c.general.ambient_enabled,
-            6 => { if let Ok(v) = value.parse() { c.general.ambient_intensity = v; } }
+            0 => c.general.enabled = !c.general.enabled,
+            1 => {
+                if let Ok(v) = value.parse() {
+                    c.general.timeout = v;
+                }
+            }
+            2 => {
+                if let Ok(v) = value.parse() {
+                    c.general.fps = v;
+                }
+            }
+            3 => c.general.default_screensaver = value.to_string(),
+            4 => c.general.fade_enabled = !c.general.fade_enabled,
+            5 => {
+                if let Ok(v) = value.parse() {
+                    c.general.fade_duration_ms = v;
+                }
+            }
+            6 => c.general.ambient_enabled = !c.general.ambient_enabled,
+            7 => {
+                if let Ok(v) = value.parse() {
+                    c.general.ambient_intensity = v;
+                }
+            }
             // Clock Overlay
-            7 => c.overlay.clock.enabled = !c.overlay.clock.enabled,
-            8 => c.overlay.clock.position = value.to_string(),
-            9 => c.overlay.clock.format = value.to_string(),
-            10 => c.overlay.clock.show_seconds = !c.overlay.clock.show_seconds,
+            8 => c.overlay.clock.enabled = !c.overlay.clock.enabled,
+            9 => c.overlay.clock.position = value.to_string(),
+            10 => c.overlay.clock.format = value.to_string(),
+            11 => c.overlay.clock.show_seconds = !c.overlay.clock.show_seconds,
             // Info Overlay
-            11 => c.overlay.info.enabled = !c.overlay.info.enabled,
-            12 => c.overlay.info.show_cwd = !c.overlay.info.show_cwd,
-            13 => c.overlay.info.show_hostname = !c.overlay.info.show_hostname,
-            14 => c.overlay.info.position = value.to_string(),
+            12 => c.overlay.info.enabled = !c.overlay.info.enabled,
+            13 => c.overlay.info.show_cwd = !c.overlay.info.show_cwd,
+            14 => c.overlay.info.show_hostname = !c.overlay.info.show_hostname,
+            15 => c.overlay.info.position = value.to_string(),
             // Lock
-            15 => c.overlay.lock.enabled = !c.overlay.lock.enabled,
-            16 => c.overlay.lock.message = value.to_string(),
-            17 => c.overlay.lock.password_required = !c.overlay.lock.password_required,
+            16 => c.overlay.lock.enabled = !c.overlay.lock.enabled,
+            17 => c.overlay.lock.message = value.to_string(),
+            18 => c.overlay.lock.password_required = !c.overlay.lock.password_required,
             // Screen Blanking
-            18 => c.blanking.enabled = !c.blanking.enabled,
-            19 => { if let Ok(v) = value.parse() { c.blanking.delay_secs = v; } }
+            19 => c.blanking.enabled = !c.blanking.enabled,
+            20 => {
+                if let Ok(v) = value.parse() {
+                    c.blanking.delay_secs = v;
+                }
+            }
             // Auto-Rotate
-            20 => c.rotate.enabled = !c.rotate.enabled,
-            21 => { if let Ok(v) = value.parse() { c.rotate.interval_secs = v; } }
-            22 => c.rotate.transition_style = value.to_string(),
-            23 => { if let Ok(v) = value.parse() { c.rotate.transition_duration_ms = v; } }
+            21 => c.rotate.enabled = !c.rotate.enabled,
+            22 => {
+                if let Ok(v) = value.parse() {
+                    c.rotate.interval_secs = v;
+                }
+            }
+            23 => c.rotate.transition_style = value.to_string(),
+            24 => {
+                if let Ok(v) = value.parse() {
+                    c.rotate.transition_duration_ms = v;
+                }
+            }
             // Power
-            24 => c.power.battery_aware = !c.power.battery_aware,
-            25 => { if let Ok(v) = value.parse() { c.power.battery_fps = v; } }
-            26 => { if let Ok(v) = value.parse() { c.power.ac_fps = v; } }
+            25 => c.power.battery_aware = !c.power.battery_aware,
+            26 => {
+                if let Ok(v) = value.parse() {
+                    c.power.battery_fps = v;
+                }
+            }
+            27 => {
+                if let Ok(v) = value.parse() {
+                    c.power.ac_fps = v;
+                }
+            }
             // Schedule
-            27 => c.schedule.enabled = !c.schedule.enabled,
-            28 => c.schedule.morning = value.to_string(),
-            29 => c.schedule.afternoon = value.to_string(),
-            30 => c.schedule.evening = value.to_string(),
-            31 => c.schedule.night = value.to_string(),
+            28 => c.schedule.enabled = !c.schedule.enabled,
+            29 => c.schedule.morning = value.to_string(),
+            30 => c.schedule.afternoon = value.to_string(),
+            31 => c.schedule.evening = value.to_string(),
+            32 => c.schedule.night = value.to_string(),
             // Theme
-            32 => c.theme.name = value.to_string(),
+            33 => c.theme.name = value.to_string(),
             _ => {}
         }
     }
@@ -258,20 +480,227 @@ impl MenuUI {
     /// Move setting cursor, skipping headers.
     fn setting_move(&mut self, delta: isize) {
         let count = self.setting_entry_count();
-        if count == 0 { return; }
+        if count == 0 {
+            return;
+        }
         let entries = self.setting_entries();
         let mut pos = self.setting_cursor as isize;
         loop {
             pos += delta;
-            if pos < 0 { pos = count as isize - 1; }
-            if pos >= count as isize { pos = 0; }
+            if pos < 0 {
+                pos = count as isize - 1;
+            }
+            if pos >= count as isize {
+                pos = 0;
+            }
             if matches!(entries[pos as usize], SettingEntry::Setting { .. }) {
                 break;
             }
             // Safety: if all are headers (impossible), break
-            if pos as usize == self.setting_cursor { break; }
+            if pos as usize == self.setting_cursor {
+                break;
+            }
         }
         self.setting_cursor = pos as usize;
+    }
+
+    // --- Filters tab data ---
+
+    fn filter_entries(&self) -> Vec<SettingEntry> {
+        let c = &self.config.filter;
+        let color_modes: Vec<String> = ColorFilterMode::all()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        vec![
+            SettingEntry::Header("CRT Effect"),
+            SettingEntry::Setting {
+                label: "CRT Enabled",
+                value: c.crt_enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Scanlines",
+                value: c.crt_scanlines.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Scanline Dim",
+                value: format!("{:.2}", c.crt_scanline_dim),
+                kind: EditKind::F64,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Vignette",
+                value: c.crt_vignette.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Vignette Strength",
+                value: format!("{:.2}", c.crt_vignette_strength),
+                kind: EditKind::F64,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Flicker",
+                value: c.crt_flicker.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Flicker Rate",
+                value: format!("{:.3}", c.crt_flicker_rate),
+                kind: EditKind::F64,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Curvature",
+                value: c.crt_curvature.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Header("Color Filter"),
+            SettingEntry::Setting {
+                label: "Color Mode",
+                value: c.color_mode.name().to_string(),
+                kind: EditKind::Text,
+                choices: Some(color_modes),
+            },
+            SettingEntry::Header("Noise"),
+            SettingEntry::Setting {
+                label: "Noise Enabled",
+                value: c.noise_enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Noise Intensity",
+                value: format!("{:.2}", c.noise_intensity),
+                kind: EditKind::F64,
+                choices: None,
+            },
+            SettingEntry::Header("Bloom"),
+            SettingEntry::Setting {
+                label: "Bloom Enabled",
+                value: c.bloom_enabled.to_string(),
+                kind: EditKind::Bool,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Bloom Threshold",
+                value: c.bloom_threshold.to_string(),
+                kind: EditKind::U32,
+                choices: None,
+            },
+            SettingEntry::Setting {
+                label: "Bloom Boost",
+                value: format!("{:.2}", c.bloom_boost),
+                kind: EditKind::F64,
+                choices: None,
+            },
+        ]
+    }
+
+    fn apply_filter_setting(&mut self, flat_idx: usize, value: &str) {
+        let f = &mut self.config.filter;
+        match flat_idx {
+            0 => f.crt_enabled = !f.crt_enabled,
+            1 => f.crt_scanlines = !f.crt_scanlines,
+            2 => {
+                if let Ok(v) = value.parse() {
+                    f.crt_scanline_dim = v;
+                }
+            }
+            3 => f.crt_vignette = !f.crt_vignette,
+            4 => {
+                if let Ok(v) = value.parse() {
+                    f.crt_vignette_strength = v;
+                }
+            }
+            5 => f.crt_flicker = !f.crt_flicker,
+            6 => {
+                if let Ok(v) = value.parse() {
+                    f.crt_flicker_rate = v;
+                }
+            }
+            7 => f.crt_curvature = !f.crt_curvature,
+            8 => f.color_mode = ColorFilterMode::from_name(value),
+            9 => f.noise_enabled = !f.noise_enabled,
+            10 => {
+                if let Ok(v) = value.parse() {
+                    f.noise_intensity = v;
+                }
+            }
+            11 => f.bloom_enabled = !f.bloom_enabled,
+            12 => {
+                if let Ok(v) = value.parse::<u32>() {
+                    f.bloom_threshold = v.min(255) as u8;
+                }
+            }
+            13 => {
+                if let Ok(v) = value.parse() {
+                    f.bloom_boost = v;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn filter_at_cursor(&self) -> Option<(usize, SettingEntry)> {
+        let entries = self.filter_entries();
+        let mut flat_idx = 0usize;
+        let mut cursor = 0usize;
+        for entry in &entries {
+            match entry {
+                SettingEntry::Header(_) => {
+                    if cursor == self.filter_cursor {
+                        return None;
+                    }
+                    cursor += 1;
+                }
+                SettingEntry::Setting { .. } => {
+                    if cursor == self.filter_cursor {
+                        return Some((flat_idx, entry.clone()));
+                    }
+                    cursor += 1;
+                    flat_idx += 1;
+                }
+            }
+        }
+        None
+    }
+
+    fn filter_entry_count(&self) -> usize {
+        self.filter_entries().len()
+    }
+
+    fn filter_move(&mut self, delta: isize) {
+        let count = self.filter_entry_count();
+        if count == 0 {
+            return;
+        }
+        let entries = self.filter_entries();
+        let mut pos = self.filter_cursor as isize;
+        loop {
+            pos += delta;
+            if pos < 0 {
+                pos = count as isize - 1;
+            }
+            if pos >= count as isize {
+                pos = 0;
+            }
+            if matches!(entries[pos as usize], SettingEntry::Setting { .. }) {
+                break;
+            }
+            if pos as usize == self.filter_cursor {
+                break;
+            }
+        }
+        self.filter_cursor = pos as usize;
     }
 
     // --- Screensaver config items ---
@@ -285,36 +714,45 @@ impl MenuUI {
             return vec![];
         };
 
-        plugin.info.config_fields.iter().map(|f| {
-            let kind = match f.kind {
-                phosphor_plugin::FieldKind::Bool => EditKind::Bool,
-                phosphor_plugin::FieldKind::U32 => EditKind::U32,
-                phosphor_plugin::FieldKind::U64 => EditKind::U64,
-                phosphor_plugin::FieldKind::USize => EditKind::USize,
-                phosphor_plugin::FieldKind::F64 => EditKind::F64,
-                phosphor_plugin::FieldKind::Text => EditKind::Text,
-            };
-            let value = saver_config
-                .and_then(|v| v.get(&f.key))
-                .map(|v| match v {
-                    toml::Value::String(s) => s.clone(),
-                    toml::Value::Boolean(b) => b.to_string(),
-                    toml::Value::Integer(i) => i.to_string(),
-                    toml::Value::Float(f) => format!("{f}"),
-                    other => other.to_string(),
-                })
-                .unwrap_or_else(|| f.default.clone());
-            (f.label.clone(), value, kind, f.choices.clone())
-        }).collect()
+        plugin
+            .info
+            .config_fields
+            .iter()
+            .map(|f| {
+                let kind = match f.kind {
+                    phosphor_plugin::FieldKind::Bool => EditKind::Bool,
+                    phosphor_plugin::FieldKind::U32 => EditKind::U32,
+                    phosphor_plugin::FieldKind::U64 => EditKind::U64,
+                    phosphor_plugin::FieldKind::USize => EditKind::USize,
+                    phosphor_plugin::FieldKind::F64 => EditKind::F64,
+                    phosphor_plugin::FieldKind::Text => EditKind::Text,
+                };
+                let value = saver_config
+                    .and_then(|v| v.get(&f.key))
+                    .map(|v| match v {
+                        toml::Value::String(s) => s.clone(),
+                        toml::Value::Boolean(b) => b.to_string(),
+                        toml::Value::Integer(i) => i.to_string(),
+                        toml::Value::Float(f) => format!("{f}"),
+                        other => other.to_string(),
+                    })
+                    .unwrap_or_else(|| f.default.clone());
+                (f.label.clone(), value, kind, f.choices.clone())
+            })
+            .collect()
     }
 
     fn apply_saver_config(&mut self, idx: usize, value: &str) {
         let name = self.selected_saver_name().to_string();
         let plugin = registry::find(&name);
         let Some(plugin) = plugin else { return };
-        let Some(field) = plugin.info.config_fields.get(idx) else { return };
+        let Some(field) = plugin.info.config_fields.get(idx) else {
+            return;
+        };
 
-        let table = self.config.screensavers
+        let table = self
+            .config
+            .screensavers
             .entry(name)
             .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
 
@@ -325,12 +763,15 @@ impl MenuUI {
 
         match field.kind {
             phosphor_plugin::FieldKind::Bool => {
-                let current = toml_table.get(&field.key)
+                let current = toml_table
+                    .get(&field.key)
                     .and_then(|v| v.as_bool())
                     .unwrap_or_else(|| field.default.parse().unwrap_or(false));
                 toml_table.insert(field.key.clone(), toml::Value::Boolean(!current));
             }
-            phosphor_plugin::FieldKind::U32 | phosphor_plugin::FieldKind::U64 | phosphor_plugin::FieldKind::USize => {
+            phosphor_plugin::FieldKind::U32
+            | phosphor_plugin::FieldKind::U64
+            | phosphor_plugin::FieldKind::USize => {
                 if let Ok(v) = value.parse::<i64>() {
                     toml_table.insert(field.key.clone(), toml::Value::Integer(v));
                 }
@@ -348,7 +789,10 @@ impl MenuUI {
 
     fn selected_saver_name(&self) -> &str {
         let plugins = registry::plugins();
-        plugins.get(self.saver_selected).map(|p| p.name.as_str()).unwrap_or("starfield")
+        plugins
+            .get(self.saver_selected)
+            .map(|p| p.name.as_str())
+            .unwrap_or("starfield")
     }
 
     fn real_saver_count() -> usize {
@@ -376,21 +820,24 @@ pub fn run(config: &Config, context: MenuContext) -> io::Result<MenuResult> {
 
     let mut ui = MenuUI::new(config.clone(), context);
 
-    // Initialize setting_cursor to first non-header
+    // Initialize cursors to first non-header
     ui.setting_move(1);
+    ui.filter_move(1);
 
     loop {
         terminal.draw(|frame| render(&ui, frame))?;
 
-        if let Some(_) = &ui.result {
+        if ui.result.is_some() {
             break;
         }
 
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
-                ui.message = None;
-                handle_input(&mut ui, code, modifiers, &mut terminal)?;
-            }
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) = event::read()?
+        {
+            ui.message = None;
+            handle_input(&mut ui, code, modifiers, &mut terminal)?;
         }
     }
 
@@ -412,8 +859,14 @@ fn handle_input(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> io::Result<()> {
     // Handle edit mode first
-    if ui.setting_editing || ui.saver_config_editing {
-        let buf = if ui.setting_editing { &mut ui.setting_buffer } else { &mut ui.saver_config_buffer };
+    if ui.setting_editing || ui.saver_config_editing || ui.filter_editing {
+        let buf = if ui.setting_editing {
+            &mut ui.setting_buffer
+        } else if ui.filter_editing {
+            &mut ui.filter_buffer
+        } else {
+            &mut ui.saver_config_buffer
+        };
         match code {
             KeyCode::Enter => {
                 let val = buf.clone();
@@ -422,6 +875,11 @@ fn handle_input(
                         ui.apply_setting(flat_idx, &val);
                     }
                     ui.setting_editing = false;
+                } else if ui.filter_editing {
+                    if let Some((flat_idx, _)) = ui.filter_at_cursor() {
+                        ui.apply_filter_setting(flat_idx, &val);
+                    }
+                    ui.filter_editing = false;
                 } else {
                     ui.apply_saver_config(ui.saver_config_selected, &val);
                     ui.saver_config_editing = false;
@@ -430,8 +888,11 @@ fn handle_input(
             KeyCode::Esc => {
                 ui.setting_editing = false;
                 ui.saver_config_editing = false;
+                ui.filter_editing = false;
             }
-            KeyCode::Backspace => { buf.pop(); }
+            KeyCode::Backspace => {
+                buf.pop();
+            }
             KeyCode::Char(c) => buf.push(c),
             _ => {}
         }
@@ -450,6 +911,7 @@ fn handle_input(
     match ui.tab {
         Tab::Screensavers => handle_screensavers_input(ui, code, terminal),
         Tab::Settings => handle_settings_input(ui, code),
+        Tab::Filters => handle_filters_input(ui, code),
         Tab::Help => handle_help_input(ui, code),
         Tab::About => handle_about_input(ui, code),
     }
@@ -478,7 +940,10 @@ fn handle_screensavers_input(
             if ui.saver_focus_right {
                 let items = ui.saver_config_items();
                 if !items.is_empty() {
-                    ui.saver_config_selected = ui.saver_config_selected.checked_sub(1).unwrap_or(items.len() - 1);
+                    ui.saver_config_selected = ui
+                        .saver_config_selected
+                        .checked_sub(1)
+                        .unwrap_or(items.len() - 1);
                 }
             } else if saver_count > 0 {
                 ui.saver_selected = ui.saver_selected.checked_sub(1).unwrap_or(saver_count - 1);
@@ -512,7 +977,11 @@ fn handle_screensavers_input(
                     } else if let Some(opts) = choices {
                         // Cycle through choices
                         let current = value.as_str();
-                        let next_idx = opts.iter().position(|o| o == current).map(|i| (i + 1) % opts.len()).unwrap_or(0);
+                        let next_idx = opts
+                            .iter()
+                            .position(|o| o == current)
+                            .map(|i| (i + 1) % opts.len())
+                            .unwrap_or(0);
                         ui.apply_saver_config(ui.saver_config_selected, &opts[next_idx]);
                     } else {
                         ui.saver_config_buffer = value.clone();
@@ -534,7 +1003,11 @@ fn handle_screensavers_input(
             // Preview
             let name = ui.selected_saver_name().to_string();
             disable_raw_mode()?;
-            execute!(terminal.backend_mut(), LeaveAlternateScreen, crossterm::cursor::Show)?;
+            execute!(
+                terminal.backend_mut(),
+                LeaveAlternateScreen,
+                crossterm::cursor::Show
+            )?;
 
             let mut preview_config = ui.config.clone();
             preview_config.general.default_screensaver = name;
@@ -572,21 +1045,83 @@ fn handle_settings_input(ui: &mut MenuUI, code: KeyCode) -> io::Result<()> {
         KeyCode::Up | KeyCode::Char('k') => ui.setting_move(-1),
         KeyCode::Down | KeyCode::Char('j') => ui.setting_move(1),
         KeyCode::Enter => {
-            if let Some((flat_idx, entry)) = ui.setting_at_cursor() {
-                if let SettingEntry::Setting { kind, value, choices, .. } = entry {
-                    match kind {
-                        EditKind::Bool => {
-                            ui.apply_setting(flat_idx, "");
+            if let Some((
+                flat_idx,
+                SettingEntry::Setting {
+                    kind,
+                    value,
+                    choices,
+                    ..
+                },
+            )) = ui.setting_at_cursor()
+            {
+                match kind {
+                    EditKind::Bool => {
+                        ui.apply_setting(flat_idx, "");
+                    }
+                    _ => {
+                        if let Some(opts) = choices {
+                            // Cycle through choices
+                            let next_idx = opts
+                                .iter()
+                                .position(|o| o == &value)
+                                .map(|i| (i + 1) % opts.len())
+                                .unwrap_or(0);
+                            ui.apply_setting(flat_idx, &opts[next_idx]);
+                        } else {
+                            ui.setting_buffer = value;
+                            ui.setting_editing = true;
                         }
-                        _ => {
-                            if let Some(opts) = choices {
-                                // Cycle through choices
-                                let next_idx = opts.iter().position(|o| o == &value).map(|i| (i + 1) % opts.len()).unwrap_or(0);
-                                ui.apply_setting(flat_idx, &opts[next_idx]);
-                            } else {
-                                ui.setting_buffer = value;
-                                ui.setting_editing = true;
-                            }
+                    }
+                }
+            }
+        }
+        KeyCode::Char('s') => {
+            save_config(ui);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn handle_filters_input(ui: &mut MenuUI, code: KeyCode) -> io::Result<()> {
+    match code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            ui.result = Some(match &ui.context {
+                MenuContext::DuringScreensaver { .. } => MenuResult::Resume,
+                MenuContext::Standalone => MenuResult::Quit,
+            });
+        }
+        KeyCode::Tab => ui.next_tab(),
+        KeyCode::BackTab => ui.prev_tab(),
+        KeyCode::Up | KeyCode::Char('k') => ui.filter_move(-1),
+        KeyCode::Down | KeyCode::Char('j') => ui.filter_move(1),
+        KeyCode::Enter => {
+            if let Some((
+                flat_idx,
+                SettingEntry::Setting {
+                    kind,
+                    value,
+                    choices,
+                    ..
+                },
+            )) = ui.filter_at_cursor()
+            {
+                match kind {
+                    EditKind::Bool => {
+                        ui.apply_filter_setting(flat_idx, "");
+                    }
+                    _ => {
+                        if let Some(opts) = choices {
+                            let next_idx = opts
+                                .iter()
+                                .position(|o| o == &value)
+                                .map(|i| (i + 1) % opts.len())
+                                .unwrap_or(0);
+                            ui.apply_filter_setting(flat_idx, &opts[next_idx]);
+                        } else {
+                            ui.filter_buffer = value;
+                            ui.filter_editing = true;
                         }
                     }
                 }
@@ -650,7 +1185,7 @@ fn render(ui: &MenuUI, frame: &mut ratatui::Frame) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Title + tab bar
-            Constraint::Min(10),  // Content
+            Constraint::Min(10),   // Content
             Constraint::Length(3), // Status
         ])
         .split(frame.area());
@@ -660,6 +1195,7 @@ fn render(ui: &MenuUI, frame: &mut ratatui::Frame) {
     match ui.tab {
         Tab::Screensavers => render_screensavers(ui, frame, chunks[1]),
         Tab::Settings => render_settings(ui, frame, chunks[1]),
+        Tab::Filters => render_filters(ui, frame, chunks[1]),
         Tab::Help => render_help(ui, frame, chunks[1]),
         Tab::About => render_about(frame, chunks[1]),
     }
@@ -673,17 +1209,28 @@ fn render_tab_bar(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
         .constraints([Constraint::Length(1), Constraint::Length(2)])
         .split(area);
 
-    let title = Paragraph::new("  Phosphor")
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+    let title = Paragraph::new("  Phosphor").style(
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    );
     frame.render_widget(title, chunks[0]);
 
-    let tabs: Vec<Span> = TABS.iter().map(|(tab, name)| {
-        if *tab == ui.tab {
-            Span::styled(format!(" [{name}] "), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-        } else {
-            Span::styled(format!("  {name}  "), Style::default().fg(Color::DarkGray))
-        }
-    }).collect();
+    let tabs: Vec<Span> = TABS
+        .iter()
+        .map(|(tab, name)| {
+            if *tab == ui.tab {
+                Span::styled(
+                    format!(" [{name}] "),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
+            } else {
+                Span::styled(format!("  {name}  "), Style::default().fg(Color::DarkGray))
+            }
+        })
+        .collect();
     let tab_line = Paragraph::new(Line::from(tabs));
     frame.render_widget(tab_line, chunks[1]);
 }
@@ -700,25 +1247,45 @@ fn render_screensavers(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
         MenuContext::DuringScreensaver { name } => Some(name.as_str()),
         _ => None,
     };
-    let list_items: Vec<ListItem> = plugins.iter().enumerate().map(|(i, plugin)| {
-        let is_default = plugin.name == ui.config.general.default_screensaver;
-        let is_running = running_name == Some(plugin.name.as_str());
-        let marker = if is_running { " ▶" } else if is_default { " *" } else { "" };
-        let style = if i == ui.saver_selected && !ui.saver_focus_right {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-        } else if i == ui.saver_selected {
-            Style::default().fg(Color::White)
-        } else {
-            Style::default().fg(Color::DarkGray)
-        };
-        ListItem::new(format!("  {}{marker}", plugin.name)).style(style)
-    }).collect();
+    let list_items: Vec<ListItem> = plugins
+        .iter()
+        .enumerate()
+        .map(|(i, plugin)| {
+            let is_default = plugin.name == ui.config.general.default_screensaver;
+            let is_running = running_name == Some(plugin.name.as_str());
+            let marker = if is_running {
+                " ▶"
+            } else if is_default {
+                " *"
+            } else {
+                ""
+            };
+            let interactive_mark = if plugin.info.interactive { " [i]" } else { "" };
+            let style = if i == ui.saver_selected && !ui.saver_focus_right {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else if i == ui.saver_selected {
+                Style::default().fg(Color::White)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            };
+            ListItem::new(format!("  {}{marker}{interactive_mark}", plugin.name)).style(style)
+        })
+        .collect();
 
     let mut list_state = ListState::default();
     list_state.select(Some(ui.saver_selected));
-    let list = List::new(list_items)
-        .block(Block::default().borders(Borders::ALL).title("Screensavers")
-            .border_style(if !ui.saver_focus_right { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) }));
+    let list = List::new(list_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Screensavers")
+            .border_style(if !ui.saver_focus_right {
+                Style::default().fg(Color::Cyan)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            }),
+    );
     frame.render_stateful_widget(list, chunks[0], &mut list_state);
 
     // Right panel: detail + config
@@ -728,7 +1295,10 @@ fn render_screensavers(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
         .split(chunks[1]);
 
     // Description
-    let desc = plugins.get(ui.saver_selected).map(|p| p.info.description.as_str()).unwrap_or("");
+    let desc = plugins
+        .get(ui.saver_selected)
+        .map(|p| p.info.description.as_str())
+        .unwrap_or("");
     let desc_widget = Paragraph::new(format!("  {desc}"))
         .style(Style::default().fg(Color::White))
         .block(Block::default().borders(Borders::ALL).title("Description"));
@@ -736,42 +1306,60 @@ fn render_screensavers(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
 
     // Per-screensaver config
     let config_items = ui.saver_config_items();
-    let config_list_items: Vec<ListItem> = config_items.iter().enumerate().map(|(i, (label, value, kind, _choices))| {
-        let display = if ui.saver_config_editing && i == ui.saver_config_selected {
-            format!("  {label}: {}_", ui.saver_config_buffer)
-        } else {
-            let val_display = if *kind == EditKind::Bool {
-                if value == "true" { "yes" } else { "no" }
+    let config_list_items: Vec<ListItem> = config_items
+        .iter()
+        .enumerate()
+        .map(|(i, (label, value, kind, _choices))| {
+            let display = if ui.saver_config_editing && i == ui.saver_config_selected {
+                format!("  {label}: {}_", ui.saver_config_buffer)
             } else {
-                value.as_str()
+                let val_display = if *kind == EditKind::Bool {
+                    if value == "true" { "yes" } else { "no" }
+                } else {
+                    value.as_str()
+                };
+                format!("  {label}: {val_display}")
             };
-            format!("  {label}: {val_display}")
-        };
-        let style = if i == ui.saver_config_selected && ui.saver_focus_right {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::White)
-        };
-        ListItem::new(display).style(style)
-    }).collect();
+            let style = if i == ui.saver_config_selected && ui.saver_focus_right {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            ListItem::new(display).style(style)
+        })
+        .collect();
 
     let mut config_state = ListState::default();
     config_state.select(Some(ui.saver_config_selected));
-    let config_list = List::new(config_list_items)
-        .block(Block::default().borders(Borders::ALL).title("Configuration")
-            .border_style(if ui.saver_focus_right { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) }));
+    let config_list = List::new(config_list_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Configuration")
+            .border_style(if ui.saver_focus_right {
+                Style::default().fg(Color::Cyan)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            }),
+    );
     frame.render_stateful_widget(config_list, right_chunks[1], &mut config_state);
 }
 
 fn render_settings(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
     let entries = ui.setting_entries();
-    let list_items: Vec<ListItem> = entries.iter().enumerate().map(|(i, entry)| {
-        match entry {
-            SettingEntry::Header(name) => {
-                ListItem::new(format!("  ── {name} ──"))
-                    .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
-            }
-            SettingEntry::Setting { label, value, kind, .. } => {
+    let list_items: Vec<ListItem> = entries
+        .iter()
+        .enumerate()
+        .map(|(i, entry)| match entry {
+            SettingEntry::Header(name) => ListItem::new(format!("  ── {name} ──")).style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            SettingEntry::Setting {
+                label, value, kind, ..
+            } => {
                 let display = if ui.setting_editing && i == ui.setting_cursor {
                     format!("    {label}: {}_", ui.setting_buffer)
                 } else {
@@ -783,48 +1371,113 @@ fn render_settings(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
                     format!("    {label}: {val_display}")
                 };
                 let style = if i == ui.setting_cursor {
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Color::White)
                 };
                 ListItem::new(display).style(style)
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     let mut list_state = ListState::default();
     list_state.select(Some(ui.setting_cursor));
-    let list = List::new(list_items)
-        .block(Block::default().borders(Borders::ALL).title("Settings")
-            .border_style(Style::default().fg(Color::Cyan)));
+    let list = List::new(list_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Settings")
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
+    frame.render_stateful_widget(list, area, &mut list_state);
+}
+
+fn render_filters(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
+    let entries = ui.filter_entries();
+    let list_items: Vec<ListItem> = entries
+        .iter()
+        .enumerate()
+        .map(|(i, entry)| match entry {
+            SettingEntry::Header(name) => ListItem::new(format!("  ── {name} ──")).style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            SettingEntry::Setting {
+                label, value, kind, ..
+            } => {
+                let display = if ui.filter_editing && i == ui.filter_cursor {
+                    format!("    {label}: {}_", ui.filter_buffer)
+                } else {
+                    let val_display = if *kind == EditKind::Bool {
+                        if value == "true" { "yes" } else { "no" }
+                    } else {
+                        value.as_str()
+                    };
+                    format!("    {label}: {val_display}")
+                };
+                let style = if i == ui.filter_cursor {
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                ListItem::new(display).style(style)
+            }
+        })
+        .collect();
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(ui.filter_cursor));
+    let list = List::new(list_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Filters")
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
     frame.render_stateful_widget(list, area, &mut list_state);
 }
 
 fn render_help(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
-    let mut lines: Vec<Line> = Vec::new();
-
-    // Global controls
-    lines.push(Line::from(Span::styled("  Global Controls", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(""));
-    lines.push(Line::from("    q/Esc        Exit screensaver"));
-    lines.push(Line::from("    m            Open this menu (during screensaver)"));
-    lines.push(Line::from("    +/=          Next screensaver"));
-    lines.push(Line::from("    -            Previous screensaver"));
-    lines.push(Line::from("    Tab/BackTab  Switch menu tabs"));
-    lines.push(Line::from("    ↑/↓ or j/k   Navigate lists"));
-    lines.push(Line::from("    Enter        Select / edit / launch"));
-    lines.push(Line::from("    s            Save configuration"));
-    lines.push(Line::from(""));
-
-    // Per-screensaver keys
-    lines.push(Line::from(Span::styled("  Screensaver Controls", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(""));
+    let mut lines: Vec<Line> = vec![
+        Line::from(Span::styled(
+            "  Global Controls",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from("    q/Esc        Exit screensaver"),
+        Line::from("    m            Open this menu (during screensaver)"),
+        Line::from("    +/=          Next screensaver"),
+        Line::from("    -            Previous screensaver"),
+        Line::from("    Tab/BackTab  Switch menu tabs"),
+        Line::from("    ↑/↓ or j/k   Navigate lists"),
+        Line::from("    Enter        Select / edit / launch"),
+        Line::from("    s            Save configuration"),
+        Line::from(""),
+        // Per-screensaver keys
+        Line::from(Span::styled(
+            "  Screensaver Controls",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+    ];
 
     for plugin in registry::plugins() {
         let has_custom_keys = plugin.info.key_bindings.len() > 1
             || (plugin.info.key_bindings.len() == 1 && plugin.info.key_bindings[0].0 != "Any key");
         if has_custom_keys || !plugin.info.features.is_empty() {
-            lines.push(Line::from(Span::styled(format!("    {}", plugin.name), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+            lines.push(Line::from(Span::styled(
+                format!("    {}", plugin.name),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )));
             if has_custom_keys {
                 for (key, desc) in &plugin.info.key_bindings {
                     lines.push(Line::from(format!("      {key:<14} {desc}")));
@@ -840,17 +1493,41 @@ fn render_help(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
     }
 
     // Features
-    lines.push(Line::from(Span::styled("  Features", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))));
+    lines.push(Line::from(Span::styled(
+        "  Features",
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    )));
     lines.push(Line::from(""));
-    lines.push(Line::from("    Auto-Rotate     Cycle through screensavers on a timer"));
-    lines.push(Line::from("    Transitions     Dissolve, slide, or melt between screensavers"));
-    lines.push(Line::from("    Clock Overlay   Show time over any screensaver"));
-    lines.push(Line::from("    Info Overlay    Show CWD/hostname over any screensaver"));
-    lines.push(Line::from("    Screen Lock     Require password to exit (PAM)"));
+    lines.push(Line::from(
+        "    Auto-Rotate     Cycle through screensavers on a timer",
+    ));
+    lines.push(Line::from(
+        "    Transitions     Dissolve, slide, or melt between screensavers",
+    ));
+    lines.push(Line::from(
+        "    Clock Overlay   Show time over any screensaver",
+    ));
+    lines.push(Line::from(
+        "    Info Overlay    Show CWD/hostname over any screensaver",
+    ));
+    lines.push(Line::from(
+        "    Screen Lock     Require password to exit (PAM)",
+    ));
     lines.push(Line::from("    Screen Blank    Go dark after inactivity"));
-    lines.push(Line::from("    Battery Aware   Reduce FPS on battery power"));
-    lines.push(Line::from("    Ambient Mode    Subtle background animation"));
-    lines.push(Line::from("    Themes          default, neon, pastel, monochrome, dracula"));
+    lines.push(Line::from(
+        "    Battery Aware   Reduce FPS on battery power",
+    ));
+    lines.push(Line::from(
+        "    Ambient Mode    Subtle background animation",
+    ));
+    lines.push(Line::from(
+        "    Filters         CRT, color modes, noise, bloom post-processing",
+    ));
+    lines.push(Line::from(
+        "    Themes          default, neon, pastel, monochrome, dracula",
+    ));
 
     let para = Paragraph::new(lines)
         .block(Block::default().borders(Borders::ALL).title("Help"))
@@ -867,13 +1544,21 @@ fn render_about(frame: &mut ratatui::Frame, area: Rect) {
 
     let lines = vec![
         Line::from(""),
-        Line::from(Span::styled("  Phosphor", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "  Phosphor",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from(format!("  Version: {version}")),
         Line::from(""),
         Line::from(format!("  Config: {config_path}")),
         Line::from(""),
         Line::from("  Shell integration:"),
-        Line::from(Span::styled("    eval \"$(phosphor init bash)\"", Style::default().fg(Color::Green))),
+        Line::from(Span::styled(
+            "    eval \"$(phosphor init bash)\"",
+            Style::default().fg(Color::Green),
+        )),
         Line::from(""),
         Line::from("  Commands:"),
         Line::from("    phosphor              Open this menu"),
@@ -881,6 +1566,8 @@ fn render_about(frame: &mut ratatui::Frame, area: Rect) {
         Line::from("    phosphor list         List all screensavers"),
         Line::from("    phosphor preview <n>  Preview a screensaver"),
         Line::from("    phosphor config       Open this menu"),
+        Line::from("    phosphor enable       Enable automatic activation"),
+        Line::from("    phosphor disable      Disable automatic activation"),
         Line::from("    phosphor gallery      Live split-screen gallery"),
     ];
 
@@ -896,10 +1583,17 @@ fn render_status_bar(ui: &MenuUI, frame: &mut ratatui::Frame, area: Rect) {
     } else if ui.setting_editing || ui.saver_config_editing {
         "Type value, Enter to confirm, Esc to cancel".into()
     } else {
-        let resume_hint = if matches!(ui.context, MenuContext::DuringScreensaver { .. }) { "  r: Resume" } else { "" };
+        let resume_hint = if matches!(ui.context, MenuContext::DuringScreensaver { .. }) {
+            "  r: Resume"
+        } else {
+            ""
+        };
         match ui.tab {
-            Tab::Screensavers => format!("Enter: Launch  p: Preview  d: Set default  s: Save  ←→: Config{resume_hint}  q: Quit"),
+            Tab::Screensavers => format!(
+                "Enter: Launch  p: Preview  d: Set default  s: Save  ←→: Config{resume_hint}  q: Quit"
+            ),
             Tab::Settings => format!("Enter: Edit/toggle  s: Save{resume_hint}  q: Quit"),
+            Tab::Filters => format!("Enter: Edit/toggle  s: Save{resume_hint}  q: Quit"),
             Tab::Help => format!("↑↓: Scroll{resume_hint}  q: Quit"),
             Tab::About => format!("{resume_hint}  q: Quit").trim_start().to_string(),
         }
@@ -918,9 +1612,15 @@ mod tests {
     fn setting_entries_count() {
         let ui = MenuUI::new(Config::default(), MenuContext::Standalone);
         let entries = ui.setting_entries();
-        let setting_count = entries.iter().filter(|e| matches!(e, SettingEntry::Setting { .. })).count();
-        assert_eq!(setting_count, 33);
-        let header_count = entries.iter().filter(|e| matches!(e, SettingEntry::Header(_))).count();
+        let setting_count = entries
+            .iter()
+            .filter(|e| matches!(e, SettingEntry::Setting { .. }))
+            .count();
+        assert_eq!(setting_count, 34);
+        let header_count = entries
+            .iter()
+            .filter(|e| matches!(e, SettingEntry::Header(_)))
+            .count();
         assert_eq!(header_count, 9);
     }
 
@@ -928,7 +1628,7 @@ mod tests {
     fn apply_setting_round_trip() {
         let mut ui = MenuUI::new(Config::default(), MenuContext::Standalone);
         assert_eq!(ui.config.general.fps, 60);
-        ui.apply_setting(1, "120");
+        ui.apply_setting(2, "120");
         assert_eq!(ui.config.general.fps, 120);
     }
 
@@ -936,9 +1636,9 @@ mod tests {
     fn apply_setting_bool_toggle() {
         let mut ui = MenuUI::new(Config::default(), MenuContext::Standalone);
         assert!(ui.config.general.fade_enabled);
-        ui.apply_setting(3, "");
+        ui.apply_setting(4, "");
         assert!(!ui.config.general.fade_enabled);
-        ui.apply_setting(3, "");
+        ui.apply_setting(4, "");
         assert!(ui.config.general.fade_enabled);
     }
 
@@ -959,7 +1659,10 @@ mod tests {
     #[test]
     fn apply_saver_config_generic() {
         let plugins = registry::plugins();
-        if let Some(idx) = plugins.iter().position(|p| !p.info.config_fields.is_empty()) {
+        if let Some(idx) = plugins
+            .iter()
+            .position(|p| !p.info.config_fields.is_empty())
+        {
             let mut ui = MenuUI::new(Config::default(), MenuContext::Standalone);
             ui.saver_selected = idx;
             let field = &plugins[idx].info.config_fields[0];
@@ -967,7 +1670,10 @@ mod tests {
             match field.kind {
                 phosphor_plugin::FieldKind::F64 => {
                     ui.apply_saver_config(0, "42.0");
-                    let val = ui.config.screensavers.get(&plugins[idx].name)
+                    let val = ui
+                        .config
+                        .screensavers
+                        .get(&plugins[idx].name)
                         .and_then(|v| v.get(&field.key))
                         .and_then(|v| v.as_float());
                     assert_eq!(val, Some(42.0));
@@ -986,6 +1692,35 @@ mod tests {
         ui.setting_cursor = 0;
         ui.setting_move(1); // Should skip header at 0 if starting there
         let entries = ui.setting_entries();
-        assert!(matches!(entries[ui.setting_cursor], SettingEntry::Setting { .. }));
+        assert!(matches!(
+            entries[ui.setting_cursor],
+            SettingEntry::Setting { .. }
+        ));
+    }
+
+    #[test]
+    fn filter_entries_count() {
+        let ui = MenuUI::new(Config::default(), MenuContext::Standalone);
+        let entries = ui.filter_entries();
+        let setting_count = entries
+            .iter()
+            .filter(|e| matches!(e, SettingEntry::Setting { .. }))
+            .count();
+        assert_eq!(setting_count, 14);
+        let header_count = entries
+            .iter()
+            .filter(|e| matches!(e, SettingEntry::Header(_)))
+            .count();
+        assert_eq!(header_count, 4);
+    }
+
+    #[test]
+    fn apply_filter_setting_bool_toggle() {
+        let mut ui = MenuUI::new(Config::default(), MenuContext::Standalone);
+        assert!(!ui.config.filter.crt_enabled);
+        ui.apply_filter_setting(0, "");
+        assert!(ui.config.filter.crt_enabled);
+        ui.apply_filter_setting(0, "");
+        assert!(!ui.config.filter.crt_enabled);
     }
 }

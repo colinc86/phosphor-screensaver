@@ -1,12 +1,12 @@
 use std::time::Duration;
 
+use phosphor_plugin::protocol::{KeyCode, MouseKind};
+use phosphor_plugin::{
+    Cell, ConfigField, EventResponse, FieldKind, KeyInput, MouseInput, PluginBuffer, PluginColor,
+    PluginInfo, ScreensaverPlugin,
+};
 use rand::Rng;
 use serde::Deserialize;
-use phosphor_plugin::{
-    Cell, ConfigField, EventResponse, FieldKind, KeyInput, MouseInput,
-    PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
-};
-use phosphor_plugin::protocol::{KeyCode, MouseKind};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -38,7 +38,7 @@ fn ix(x: usize, y: usize, n_x: usize) -> usize {
     x + y * (n_x + 2)
 }
 
-fn set_bnd(b: i32, x: &mut Vec<f64>, n_x: usize, n_y: usize) {
+fn set_bnd(b: i32, x: &mut [f64], n_x: usize, n_y: usize) {
     for i in 1..=n_x {
         x[ix(i, 0, n_x)] = if b == 2 {
             -x[ix(i, 1, n_x)]
@@ -68,13 +68,13 @@ fn set_bnd(b: i32, x: &mut Vec<f64>, n_x: usize, n_y: usize) {
     x[ix(0, 0, n_x)] = 0.5 * (x[ix(1, 0, n_x)] + x[ix(0, 1, n_x)]);
     x[ix(0, n_y + 1, n_x)] = 0.5 * (x[ix(1, n_y + 1, n_x)] + x[ix(0, n_y, n_x)]);
     x[ix(n_x + 1, 0, n_x)] = 0.5 * (x[ix(n_x, 0, n_x)] + x[ix(n_x + 1, 1, n_x)]);
-    x[ix(n_x + 1, n_y + 1, n_x)] =
-        0.5 * (x[ix(n_x, n_y + 1, n_x)] + x[ix(n_x + 1, n_y, n_x)]);
+    x[ix(n_x + 1, n_y + 1, n_x)] = 0.5 * (x[ix(n_x, n_y + 1, n_x)] + x[ix(n_x + 1, n_y, n_x)]);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn diffuse(
     b: i32,
-    x: &mut Vec<f64>,
+    x: &mut [f64],
     x0: &[f64],
     diff: f64,
     dt: f64,
@@ -99,9 +99,10 @@ fn diffuse(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn advect(
     b: i32,
-    d: &mut Vec<f64>,
+    d: &mut [f64],
     d0: &[f64],
     vx: &[f64],
     vy: &[f64],
@@ -137,11 +138,12 @@ fn advect(
     set_bnd(b, d, n_x, n_y);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn project(
-    vx: &mut Vec<f64>,
-    vy: &mut Vec<f64>,
-    p: &mut Vec<f64>,
-    div: &mut Vec<f64>,
+    vx: &mut [f64],
+    vy: &mut [f64],
+    p: &mut [f64],
+    div: &mut [f64],
     n_x: usize,
     n_y: usize,
     iter: usize,
@@ -176,10 +178,8 @@ fn project(
 
     for j in 1..=n_y {
         for i in 1..=n_x {
-            vx[ix(i, j, n_x)] -=
-                0.5 * n_x as f64 * (p[ix(i + 1, j, n_x)] - p[ix(i - 1, j, n_x)]);
-            vy[ix(i, j, n_x)] -=
-                0.5 * n_y as f64 * (p[ix(i, j + 1, n_x)] - p[ix(i, j - 1, n_x)]);
+            vx[ix(i, j, n_x)] -= 0.5 * n_x as f64 * (p[ix(i + 1, j, n_x)] - p[ix(i - 1, j, n_x)]);
+            vy[ix(i, j, n_x)] -= 0.5 * n_y as f64 * (p[ix(i, j + 1, n_x)] - p[ix(i, j - 1, n_x)]);
         }
     }
     set_bnd(1, vx, n_x, n_y);
@@ -224,6 +224,8 @@ struct Fluid {
     inject_interval: f64,
     last_mouse_x: Option<u16>,
     last_mouse_y: Option<u16>,
+    wind_x: f64,
+    wind_y: f64,
 }
 
 impl Fluid {
@@ -252,6 +254,8 @@ impl Fluid {
             inject_interval: 0.5,
             last_mouse_x: None,
             last_mouse_y: None,
+            wind_x: 0.0,
+            wind_y: 0.0,
         }
     }
 
@@ -259,6 +263,7 @@ impl Fluid {
         (self.n_x + 2) * (self.n_y + 2)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn inject_at(&mut self, gx: usize, gy: usize, vel_x: f64, vel_y: f64, r: f64, g: f64, b: f64) {
         let radius = 2i32;
         for dy in -radius..=radius {
@@ -323,8 +328,26 @@ impl Fluid {
         std::mem::swap(&mut self.vx, &mut self.vx0);
         std::mem::swap(&mut self.vy, &mut self.vy0);
 
-        advect(1, &mut self.vx, &self.vx0, &self.vx0, &self.vy0, dt, n_x, n_y);
-        advect(2, &mut self.vy, &self.vy0, &self.vx0, &self.vy0, dt, n_x, n_y);
+        advect(
+            1,
+            &mut self.vx,
+            &self.vx0,
+            &self.vx0,
+            &self.vy0,
+            dt,
+            n_x,
+            n_y,
+        );
+        advect(
+            2,
+            &mut self.vy,
+            &self.vy0,
+            &self.vx0,
+            &self.vy0,
+            dt,
+            n_x,
+            n_y,
+        );
 
         project(
             &mut self.vx,
@@ -337,19 +360,73 @@ impl Fluid {
         );
 
         std::mem::swap(&mut self.dye_r, &mut self.dye_r0);
-        diffuse(0, &mut self.dye_r, &self.dye_r0, diff, dt, n_x, n_y, iterations);
+        diffuse(
+            0,
+            &mut self.dye_r,
+            &self.dye_r0,
+            diff,
+            dt,
+            n_x,
+            n_y,
+            iterations,
+        );
         std::mem::swap(&mut self.dye_r, &mut self.dye_r0);
-        advect(0, &mut self.dye_r, &self.dye_r0, &self.vx, &self.vy, dt, n_x, n_y);
+        advect(
+            0,
+            &mut self.dye_r,
+            &self.dye_r0,
+            &self.vx,
+            &self.vy,
+            dt,
+            n_x,
+            n_y,
+        );
 
         std::mem::swap(&mut self.dye_g, &mut self.dye_g0);
-        diffuse(0, &mut self.dye_g, &self.dye_g0, diff, dt, n_x, n_y, iterations);
+        diffuse(
+            0,
+            &mut self.dye_g,
+            &self.dye_g0,
+            diff,
+            dt,
+            n_x,
+            n_y,
+            iterations,
+        );
         std::mem::swap(&mut self.dye_g, &mut self.dye_g0);
-        advect(0, &mut self.dye_g, &self.dye_g0, &self.vx, &self.vy, dt, n_x, n_y);
+        advect(
+            0,
+            &mut self.dye_g,
+            &self.dye_g0,
+            &self.vx,
+            &self.vy,
+            dt,
+            n_x,
+            n_y,
+        );
 
         std::mem::swap(&mut self.dye_b, &mut self.dye_b0);
-        diffuse(0, &mut self.dye_b, &self.dye_b0, diff, dt, n_x, n_y, iterations);
+        diffuse(
+            0,
+            &mut self.dye_b,
+            &self.dye_b0,
+            diff,
+            dt,
+            n_x,
+            n_y,
+            iterations,
+        );
         std::mem::swap(&mut self.dye_b, &mut self.dye_b0);
-        advect(0, &mut self.dye_b, &self.dye_b0, &self.vx, &self.vy, dt, n_x, n_y);
+        advect(
+            0,
+            &mut self.dye_b,
+            &self.dye_b0,
+            &self.vx,
+            &self.vy,
+            dt,
+            n_x,
+            n_y,
+        );
 
         let decay = (1.0 - 0.1 * dt).max(0.0);
         let size = self.total_size();
@@ -417,14 +494,17 @@ impl ScreensaverPlugin for Fluid {
         PluginInfo {
             name: "fluid".into(),
             description: "Fluid dynamics simulation using Navier-Stokes equations".into(),
+            interactive: true,
             key_bindings: vec![
                 ("r".into(), "Reset simulation".into()),
+                ("←/→/↑/↓".into(), "Blow wind".into()),
                 ("Mouse drag".into(), "Inject dye and force".into()),
             ],
             features: vec![
                 "Navier-Stokes fluid simulation".into(),
                 "RGB dye advection".into(),
                 "Interactive mouse input".into(),
+                "Arrow key wind control".into(),
             ],
             config_fields: vec![
                 ConfigField {
@@ -494,6 +574,8 @@ impl ScreensaverPlugin for Fluid {
         self.inject_timer = 0.0;
         self.last_mouse_x = None;
         self.last_mouse_y = None;
+        self.wind_x = 0.0;
+        self.wind_y = 0.0;
 
         if self.n_x > 4 && self.n_y > 4 {
             self.inject_random();
@@ -512,6 +594,26 @@ impl ScreensaverPlugin for Fluid {
         if self.inject_timer >= self.inject_interval {
             self.inject_timer -= self.inject_interval;
             self.inject_random();
+        }
+
+        // Apply wind across center region
+        if self.wind_x.abs() > 0.01 || self.wind_y.abs() > 0.01 {
+            let cx = self.n_x / 2;
+            let cy = self.n_y / 2;
+            let radius = 3i32;
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    let gx = cx as i32 + dx;
+                    let gy = cy as i32 + dy;
+                    if gx >= 1 && gx <= self.n_x as i32 && gy >= 1 && gy <= self.n_y as i32 {
+                        let idx = ix(gx as usize, gy as usize, self.n_x);
+                        self.vx[idx] += self.wind_x;
+                        self.vy[idx] += self.wind_y;
+                    }
+                }
+            }
+            self.wind_x *= 0.92;
+            self.wind_y *= 0.92;
         }
 
         let sim_dt = dt_secs.min(0.05);
@@ -538,7 +640,15 @@ impl ScreensaverPlugin for Fluid {
                     let cg = (g * 255.0).clamp(0.0, 255.0) as u8;
                     let cb = (b * 255.0).clamp(0.0, 255.0) as u8;
 
-                    buf.set(x, y, Cell { ch, fg: PluginColor::Rgb(cr, cg, cb), bg: PluginColor::Reset });
+                    buf.set(
+                        x,
+                        y,
+                        Cell {
+                            ch,
+                            fg: PluginColor::Rgb(cr, cg, cb),
+                            bg: PluginColor::Reset,
+                        },
+                    );
                 }
             }
         }
@@ -564,6 +674,58 @@ impl ScreensaverPlugin for Fluid {
                     self.inject_random();
                     self.inject_random();
                     self.inject_random();
+                }
+                EventResponse::Continue
+            }
+            KeyCode::Left => {
+                self.wind_x -= self.force_strength;
+                let cx = self.n_x / 2;
+                let cy = self.n_y / 2;
+                if cx >= 1 && cx <= self.n_x && cy >= 1 && cy <= self.n_y {
+                    let mut rng = rand::rng();
+                    let r: f64 = rng.random_range(0.3..1.0);
+                    let g: f64 = rng.random_range(0.3..1.0);
+                    let b: f64 = rng.random_range(0.3..1.0);
+                    self.inject_at(cx, cy, 0.0, 0.0, r, g, b);
+                }
+                EventResponse::Continue
+            }
+            KeyCode::Right => {
+                self.wind_x += self.force_strength;
+                let cx = self.n_x / 2;
+                let cy = self.n_y / 2;
+                if cx >= 1 && cx <= self.n_x && cy >= 1 && cy <= self.n_y {
+                    let mut rng = rand::rng();
+                    let r: f64 = rng.random_range(0.3..1.0);
+                    let g: f64 = rng.random_range(0.3..1.0);
+                    let b: f64 = rng.random_range(0.3..1.0);
+                    self.inject_at(cx, cy, 0.0, 0.0, r, g, b);
+                }
+                EventResponse::Continue
+            }
+            KeyCode::Up => {
+                self.wind_y -= self.force_strength;
+                let cx = self.n_x / 2;
+                let cy = self.n_y / 2;
+                if cx >= 1 && cx <= self.n_x && cy >= 1 && cy <= self.n_y {
+                    let mut rng = rand::rng();
+                    let r: f64 = rng.random_range(0.3..1.0);
+                    let g: f64 = rng.random_range(0.3..1.0);
+                    let b: f64 = rng.random_range(0.3..1.0);
+                    self.inject_at(cx, cy, 0.0, 0.0, r, g, b);
+                }
+                EventResponse::Continue
+            }
+            KeyCode::Down => {
+                self.wind_y += self.force_strength;
+                let cx = self.n_x / 2;
+                let cy = self.n_y / 2;
+                if cx >= 1 && cx <= self.n_x && cy >= 1 && cy <= self.n_y {
+                    let mut rng = rand::rng();
+                    let r: f64 = rng.random_range(0.3..1.0);
+                    let g: f64 = rng.random_range(0.3..1.0);
+                    let b: f64 = rng.random_range(0.3..1.0);
+                    self.inject_at(cx, cy, 0.0, 0.0, r, g, b);
                 }
                 EventResponse::Continue
             }
@@ -730,9 +892,7 @@ mod tests {
         advect(0, &mut density, &density_prev, &vx, &vy, 0.5, n_x, n_y);
 
         let orig_center = density[ix(10, 10, n_x)];
-        let total_right: f64 = (11..=n_x)
-            .map(|i| density[ix(i, 10, n_x)])
-            .sum();
+        let total_right: f64 = (11..=n_x).map(|i| density[ix(i, 10, n_x)]).sum();
 
         assert!(
             orig_center < 1.0 || total_right > 0.0,
@@ -859,7 +1019,10 @@ mod tests {
         assert!(fluid.dye_g[idx] > 0.0, "Green dye should be injected");
         assert!(fluid.dye_b[idx] > 0.0, "Blue dye should be injected");
         assert!(fluid.vx[idx] > 0.0, "X velocity should be injected");
-        assert!(fluid.vy[idx] < 0.0, "Y velocity should be injected (negative)");
+        assert!(
+            fluid.vy[idx] < 0.0,
+            "Y velocity should be injected (negative)"
+        );
     }
 
     #[test]
@@ -873,7 +1036,10 @@ mod tests {
             fluid.update(Duration::from_millis(33));
         }
 
-        let key = KeyInput { code: KeyCode::Char('r'), modifiers: 0 };
+        let key = KeyInput {
+            code: KeyCode::Char('r'),
+            modifiers: 0,
+        };
         assert_eq!(fluid.handle_key(key), EventResponse::Continue);
     }
 
@@ -891,5 +1057,57 @@ mod tests {
         fluid.update(Duration::from_millis(33));
         let mut buf = PluginBuffer::new(20, 10);
         fluid.render(&mut buf);
+    }
+
+    #[test]
+    fn arrow_keys_set_wind() {
+        let config = FluidConfig::default();
+        let mut fluid = Fluid::new(config);
+        fluid.init(20, 10);
+
+        let left = KeyInput {
+            code: KeyCode::Left,
+            modifiers: 0,
+        };
+        assert_eq!(fluid.handle_key(left), EventResponse::Continue);
+        assert!(fluid.wind_x < 0.0);
+
+        let right = KeyInput {
+            code: KeyCode::Right,
+            modifiers: 0,
+        };
+        assert_eq!(fluid.handle_key(right), EventResponse::Continue);
+
+        let up = KeyInput {
+            code: KeyCode::Up,
+            modifiers: 0,
+        };
+        assert_eq!(fluid.handle_key(up), EventResponse::Continue);
+        assert!(fluid.wind_y < 0.0);
+
+        let down = KeyInput {
+            code: KeyCode::Down,
+            modifiers: 0,
+        };
+        assert_eq!(fluid.handle_key(down), EventResponse::Continue);
+    }
+
+    #[test]
+    fn wind_decays_on_update() {
+        let config = FluidConfig::default();
+        let mut fluid = Fluid::new(config);
+        fluid.init(20, 10);
+        fluid.wind_x = 5.0;
+        fluid.wind_y = 5.0;
+
+        fluid.update(Duration::from_millis(33));
+        assert!(fluid.wind_x < 5.0);
+        assert!(fluid.wind_y < 5.0);
+    }
+
+    #[test]
+    fn info_is_interactive() {
+        let fluid = Fluid::new(FluidConfig::default());
+        assert!(fluid.info().interactive);
     }
 }

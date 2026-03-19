@@ -15,5 +15,8 @@ members = [
     "savers/plasma",
     "savers/starfield",
     "savers/terrain",
+    "savers/rotating_cube",
+    "savers/flurry",
+    "savers/road_racer",
 ]
 resolver = "3"

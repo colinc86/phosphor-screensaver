@@ -16,6 +16,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::config::Config;
+use crate::filter::FilterState;
 use crate::plugin_host::{PluginRenderer, copy_buffer_to_region};
 use crate::registry;
 
@@ -34,15 +35,14 @@ fn compute_layout(term_w: u16, term_h: u16, count: usize) -> PanelLayout {
     let mut best_waste = u32::MAX;
 
     for cols in 1..=count.min(term_w as usize / 10) {
-        let rows = (count + cols - 1) / cols;
+        let rows = count.div_ceil(cols);
         let pw = term_w / cols as u16;
         let ph = (term_h.saturating_sub(1)) / rows as u16; // -1 for status bar
         if pw < 10 || ph < 5 {
             continue;
         }
-        let waste = (pw as u32 * ph as u32).abs_diff(
-            (term_w as u32 / count as u32) * (term_h as u32 / count as u32),
-        );
+        let waste = (pw as u32 * ph as u32)
+            .abs_diff((term_w as u32 / count as u32) * (term_h as u32 / count as u32));
         let empty_cells = (cols * rows - count) as u32 * pw as u32 * ph as u32;
         let total_waste = waste + empty_cells;
         if total_waste < best_waste {
@@ -96,6 +96,7 @@ pub fn run(config: &Config) -> io::Result<()> {
     let mut selected: usize = 0;
     let mut last_frame = Instant::now();
     let frame_duration = Duration::from_millis(1000 / 15); // 15 FPS for gallery
+    let mut filter_state = FilterState::new(size.width, size.height);
 
     loop {
         // Poll events
@@ -186,6 +187,7 @@ pub fn run(config: &Config) -> io::Result<()> {
         let panel_h = layout.panel_h;
         let cols = layout.cols;
         let saver_names: Vec<&str> = savers.iter().map(|s| s.name()).collect();
+        let filter_ref = &mut filter_state;
         execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
         terminal.draw(|frame| {
             let area = frame.area();
@@ -225,11 +227,13 @@ pub fn run(config: &Config) -> io::Result<()> {
                 let label_x = px + (panel_w.saturating_sub(name.len() as u16)) / 2;
                 for (j, ch) in name.chars().enumerate() {
                     let lx = label_x + j as u16;
-                    if lx > px && lx < px + panel_w - 1 && label_y < area.height {
-                        buf.cell_mut((lx, label_y)).map(|cell| {
-                            cell.set_char(ch);
-                            cell.set_style(label_style);
-                        });
+                    if lx > px
+                        && lx < px + panel_w - 1
+                        && label_y < area.height
+                        && let Some(cell) = buf.cell_mut((lx, label_y))
+                    {
+                        cell.set_char(ch);
+                        cell.set_style(label_style);
                     }
                 }
 
@@ -250,29 +254,30 @@ pub fn run(config: &Config) -> io::Result<()> {
             let buf = frame.buffer_mut();
             for (i, ch) in status.chars().enumerate() {
                 let x = i as u16;
-                if x < area.width {
-                    buf.cell_mut((x, status_y)).map(|cell| {
-                        cell.set_char(ch);
-                        cell.set_style(
-                            Style::default()
-                                .fg(Color::Black)
-                                .bg(Color::DarkGray),
-                        );
-                    });
+                if x < area.width
+                    && let Some(cell) = buf.cell_mut((x, status_y))
+                {
+                    cell.set_char(ch);
+                    cell.set_style(Style::default().fg(Color::Black).bg(Color::DarkGray));
                 }
             }
             // Fill rest of status bar
             for x in status.len() as u16..area.width {
-                buf.cell_mut((x, status_y)).map(|cell| {
+                if let Some(cell) = buf.cell_mut((x, status_y)) {
                     cell.set_char(' ');
                     cell.set_style(Style::default().bg(Color::DarkGray));
-                });
+                }
             }
+
+            // Apply visual filters
+            filter_ref.apply(frame.buffer_mut(), &config.filter);
 
             // Reset bottom-right cell to prevent terminal scroll
             let last_x = area.width.saturating_sub(1);
             let last_y = area.height.saturating_sub(1);
-            frame.buffer_mut().cell_mut((last_x, last_y)).map(|c| c.reset());
+            if let Some(c) = frame.buffer_mut().cell_mut((last_x, last_y)) {
+                c.reset()
+            }
         })?;
         execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
     }
@@ -291,43 +296,43 @@ pub fn run(config: &Config) -> io::Result<()> {
 fn draw_border(buf: &mut Buffer, x: u16, y: u16, w: u16, h: u16, style: Style) {
     // Top and bottom
     for bx in x + 1..x + w - 1 {
-        buf.cell_mut((bx, y)).map(|c| {
+        if let Some(c) = buf.cell_mut((bx, y)) {
             c.set_char('\u{2500}');
             c.set_style(style);
-        });
-        buf.cell_mut((bx, y + h - 2)).map(|c| {
+        }
+        if let Some(c) = buf.cell_mut((bx, y + h - 2)) {
             c.set_char('\u{2500}');
             c.set_style(style);
-        });
+        }
     }
     // Sides
     for by in y + 1..y + h - 2 {
-        buf.cell_mut((x, by)).map(|c| {
+        if let Some(c) = buf.cell_mut((x, by)) {
             c.set_char('\u{2502}');
             c.set_style(style);
-        });
-        buf.cell_mut((x + w - 1, by)).map(|c| {
+        }
+        if let Some(c) = buf.cell_mut((x + w - 1, by)) {
             c.set_char('\u{2502}');
             c.set_style(style);
-        });
+        }
     }
     // Corners
-    buf.cell_mut((x, y)).map(|c| {
+    if let Some(c) = buf.cell_mut((x, y)) {
         c.set_char('\u{250C}');
         c.set_style(style);
-    });
-    buf.cell_mut((x + w - 1, y)).map(|c| {
+    }
+    if let Some(c) = buf.cell_mut((x + w - 1, y)) {
         c.set_char('\u{2510}');
         c.set_style(style);
-    });
-    buf.cell_mut((x, y + h - 2)).map(|c| {
+    }
+    if let Some(c) = buf.cell_mut((x, y + h - 2)) {
         c.set_char('\u{2514}');
         c.set_style(style);
-    });
-    buf.cell_mut((x + w - 1, y + h - 2)).map(|c| {
+    }
+    if let Some(c) = buf.cell_mut((x + w - 1, y + h - 2)) {
         c.set_char('\u{2518}');
         c.set_style(style);
-    });
+    }
 }
 
 #[cfg(test)]

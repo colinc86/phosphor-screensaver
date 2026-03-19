@@ -1,11 +1,10 @@
 use std::time::Duration;
 
+use phosphor_plugin::{
+    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
+};
 use rand::Rng;
 use serde::Deserialize;
-use phosphor_plugin::{
-    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
-    ScreensaverPlugin,
-};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -156,6 +155,7 @@ impl ScreensaverPlugin for Aurora {
         PluginInfo {
             name: "aurora".into(),
             description: "Northern lights with undulating ribbons of color".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "Layered undulating ribbons".into(),
@@ -249,7 +249,11 @@ impl ScreensaverPlugin for Aurora {
                     buf.set(
                         cx as u16,
                         cy as u16,
-                        Cell { ch, fg: PluginColor::Rgb(r, g, b), bg: PluginColor::Reset },
+                        Cell {
+                            ch,
+                            fg: PluginColor::Rgb(r, g, b),
+                            bg: PluginColor::Reset,
+                        },
                     );
                 }
             }

@@ -2,6 +2,8 @@
 name = "phosphor-saver-maze"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/colinc86/phosphor"
 
 [dependencies]
 phosphor-plugin = { path = "../../crates/phosphor-plugin" }

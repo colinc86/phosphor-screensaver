@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub general: GeneralConfig,
@@ -13,12 +13,14 @@ pub struct Config {
     pub theme: ThemeConfig,
     pub schedule: ScheduleConfig,
     pub compositor: CompositorConfig,
+    pub filter: FilterConfig,
     pub screensavers: HashMap<String, toml::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GeneralConfig {
+    pub enabled: bool,
     pub timeout: u64,
     pub fps: u32,
     pub default_screensaver: String,
@@ -38,7 +40,7 @@ pub struct RotateConfig {
     pub transition_duration_ms: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OverlayConfig {
     pub clock: ClockOverlayConfig,
@@ -93,14 +95,14 @@ pub struct ThemeConfig {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ScheduleConfig {
     pub enabled: bool,
-    pub morning: String,    // 6am-12pm
-    pub afternoon: String,  // 12pm-6pm
-    pub evening: String,    // 6pm-10pm
-    pub night: String,      // 10pm-6am
+    pub morning: String,   // 6am-12pm
+    pub afternoon: String, // 12pm-6pm
+    pub evening: String,   // 6pm-10pm
+    pub night: String,     // 10pm-6am
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,27 +112,95 @@ pub struct CompositorConfig {
     pub split_ratio: f64,
 }
 
-// --- Default implementations ---
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorFilterMode {
+    #[default]
+    Normal,
+    MonochromeGreen,
+    MonochromeAmber,
+    Sepia,
+    Inverted,
+}
 
-impl Default for Config {
+impl ColorFilterMode {
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "monochrome_green" => Self::MonochromeGreen,
+            "monochrome_amber" => Self::MonochromeAmber,
+            "sepia" => Self::Sepia,
+            "inverted" => Self::Inverted,
+            _ => Self::Normal,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Normal => "normal",
+            Self::MonochromeGreen => "monochrome_green",
+            Self::MonochromeAmber => "monochrome_amber",
+            Self::Sepia => "sepia",
+            Self::Inverted => "inverted",
+        }
+    }
+
+    pub fn all() -> &'static [&'static str] {
+        &[
+            "normal",
+            "monochrome_green",
+            "monochrome_amber",
+            "sepia",
+            "inverted",
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FilterConfig {
+    pub crt_enabled: bool,
+    pub crt_scanlines: bool,
+    pub crt_scanline_dim: f64,
+    pub crt_vignette: bool,
+    pub crt_vignette_strength: f64,
+    pub crt_flicker: bool,
+    pub crt_flicker_rate: f64,
+    pub crt_curvature: bool,
+    pub color_mode: ColorFilterMode,
+    pub noise_enabled: bool,
+    pub noise_intensity: f64,
+    pub bloom_enabled: bool,
+    pub bloom_threshold: u8,
+    pub bloom_boost: f64,
+}
+
+impl Default for FilterConfig {
     fn default() -> Self {
         Self {
-            general: GeneralConfig::default(),
-            rotate: RotateConfig::default(),
-            overlay: OverlayConfig::default(),
-            blanking: BlankingConfig::default(),
-            power: PowerConfig::default(),
-            theme: ThemeConfig::default(),
-            schedule: ScheduleConfig::default(),
-            compositor: CompositorConfig::default(),
-            screensavers: HashMap::new(),
+            crt_enabled: false,
+            crt_scanlines: true,
+            crt_scanline_dim: 0.4,
+            crt_vignette: true,
+            crt_vignette_strength: 0.5,
+            crt_flicker: true,
+            crt_flicker_rate: 0.02,
+            crt_curvature: true,
+            color_mode: ColorFilterMode::Normal,
+            noise_enabled: false,
+            noise_intensity: 0.05,
+            bloom_enabled: false,
+            bloom_threshold: 180,
+            bloom_boost: 0.3,
         }
     }
 }
 
+// --- Default implementations ---
+
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             timeout: 300,
             fps: 60,
             default_screensaver: "starfield".into(),
@@ -147,23 +217,9 @@ impl Default for RotateConfig {
         Self {
             enabled: false,
             interval_secs: 120,
-            screensavers: vec![
-                "starfield".into(),
-                "matrix_rain".into(),
-                "pipes".into(),
-            ],
+            screensavers: vec!["starfield".into(), "matrix_rain".into(), "pipes".into()],
             transition_style: "dissolve".into(),
             transition_duration_ms: 800,
-        }
-    }
-}
-
-impl Default for OverlayConfig {
-    fn default() -> Self {
-        Self {
-            clock: ClockOverlayConfig::default(),
-            info: InfoOverlayConfig::default(),
-            lock: LockOverlayConfig::default(),
         }
     }
 }
@@ -223,18 +279,6 @@ impl Default for ThemeConfig {
     fn default() -> Self {
         Self {
             name: "default".into(),
-        }
-    }
-}
-
-impl Default for ScheduleConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            morning: String::new(),
-            afternoon: String::new(),
-            evening: String::new(),
-            night: String::new(),
         }
     }
 }
@@ -353,6 +397,7 @@ mod tests {
     #[test]
     fn default_config_is_valid() {
         let config = Config::default();
+        assert!(config.general.enabled);
         assert_eq!(config.general.timeout, 300);
         assert_eq!(config.general.fps, 60);
         assert_eq!(config.general.default_screensaver, "starfield");

@@ -1,10 +1,11 @@
 use std::time::Duration;
 
-use serde::Deserialize;
+use phosphor_plugin::protocol::KeyCode;
 use phosphor_plugin::{
-    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
+    Cell, ConfigField, EventResponse, FieldKind, KeyInput, PluginBuffer, PluginColor, PluginInfo,
     ScreensaverPlugin,
 };
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -44,6 +45,8 @@ struct Terrain {
     height: u16,
     cam_x: f64,
     cam_z: f64,
+    strafe_x: f64,
+    altitude_offset: f64,
     perm: [u8; PERM_SIZE],
     config: TerrainConfig,
 }
@@ -55,6 +58,8 @@ impl Terrain {
             height: 24,
             cam_x: 0.0,
             cam_z: 0.0,
+            strafe_x: 0.0,
+            altitude_offset: 0.0,
             perm: Self::build_permutation_table(),
             config,
         }
@@ -63,13 +68,15 @@ impl Terrain {
     /// Build a shuffled permutation table for noise hashing.
     fn build_permutation_table() -> [u8; PERM_SIZE] {
         let mut perm = [0u8; PERM_SIZE];
-        for i in 0..PERM_SIZE {
-            perm[i] = i as u8;
+        for (i, slot) in perm.iter_mut().enumerate() {
+            *slot = i as u8;
         }
         // Fisher-Yates shuffle using a simple LCG seeded deterministically.
         let mut seed: u64 = 0xDEAD_BEEF_CAFE_1234;
         for i in (1..PERM_SIZE).rev() {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let j = (seed >> 33) as usize % (i + 1);
             perm.swap(i, j);
         }
@@ -134,13 +141,13 @@ impl Terrain {
         let (ch, base_color) = match self.config.palette.as_str() {
             "alien" => {
                 if height < WATER_THRESHOLD {
-                    ('~', PluginColor::Rgb(128, 0, 255))   // purple water
+                    ('~', PluginColor::Rgb(128, 0, 255)) // purple water
                 } else if height < GRASS_THRESHOLD {
-                    ('.', PluginColor::Rgb(0, 255, 255))    // cyan vegetation
+                    ('.', PluginColor::Rgb(0, 255, 255)) // cyan vegetation
                 } else if height < ROCK_THRESHOLD {
-                    ('^', PluginColor::Rgb(255, 0, 255))    // magenta rock
+                    ('^', PluginColor::Rgb(255, 0, 255)) // magenta rock
                 } else {
-                    ('*', PluginColor::Rgb(255, 255, 0))    // yellow peaks
+                    ('*', PluginColor::Rgb(255, 255, 0)) // yellow peaks
                 }
             }
             "mono" => {
@@ -157,13 +164,13 @@ impl Terrain {
             // "earth" and default
             _ => {
                 if height < WATER_THRESHOLD {
-                    ('~', PluginColor::Rgb(30, 90, 200))    // blue water
+                    ('~', PluginColor::Rgb(30, 90, 200)) // blue water
                 } else if height < GRASS_THRESHOLD {
-                    ('.', PluginColor::Rgb(34, 139, 34))    // green grass
+                    ('.', PluginColor::Rgb(34, 139, 34)) // green grass
                 } else if height < ROCK_THRESHOLD {
-                    ('^', PluginColor::Rgb(139, 137, 137))  // gray rock
+                    ('^', PluginColor::Rgb(139, 137, 137)) // gray rock
                 } else {
-                    ('*', PluginColor::Rgb(240, 240, 255))  // white snow
+                    ('*', PluginColor::Rgb(240, 240, 255)) // white snow
                 }
             }
         };
@@ -197,11 +204,16 @@ impl ScreensaverPlugin for Terrain {
         PluginInfo {
             name: "terrain".into(),
             description: "Voxel-space terrain flyover with procedural value noise".into(),
-            key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
+            interactive: true,
+            key_bindings: vec![
+                ("←/→".into(), "Strafe camera left/right".into()),
+                ("↑/↓".into(), "Adjust altitude".into()),
+            ],
             features: vec![
                 "Procedural fractal noise terrain".into(),
                 "Biome-based coloring".into(),
                 "Distance fog".into(),
+                "Arrow key camera control".into(),
             ],
             config_fields: vec![
                 ConfigField {
@@ -250,7 +262,32 @@ impl ScreensaverPlugin for Terrain {
 
     fn update(&mut self, dt: Duration) {
         let dt_secs = dt.as_secs_f64();
+        self.cam_x += self.strafe_x * dt_secs;
+        self.strafe_x *= 0.92;
         self.cam_z += self.config.speed * 10.0 * dt_secs;
+    }
+
+    fn handle_key(&mut self, key: KeyInput) -> EventResponse {
+        match key.code {
+            KeyCode::Left => {
+                self.strafe_x -= 20.0;
+                EventResponse::Continue
+            }
+            KeyCode::Right => {
+                self.strafe_x += 20.0;
+                EventResponse::Continue
+            }
+            KeyCode::Up => {
+                self.altitude_offset += 10.0;
+                EventResponse::Continue
+            }
+            KeyCode::Down => {
+                self.altitude_offset =
+                    (self.altitude_offset - 10.0).max(10.0 - self.config.altitude);
+                EventResponse::Continue
+            }
+            _ => EventResponse::Ignored,
+        }
     }
 
     fn render(&self, buf: &mut PluginBuffer) {
@@ -297,7 +334,8 @@ impl ScreensaverPlugin for Terrain {
                 let terrain_height = self.fbm(world_x * noise_scale, world_z * noise_scale);
 
                 // Project terrain height to screen row
-                let height_above_terrain = self.config.altitude * (1.0 - terrain_height);
+                let height_above_terrain =
+                    (self.config.altitude + self.altitude_offset) * (1.0 - terrain_height);
                 let projected_y = (height_above_terrain / depth) * (h as f64 / 2.0);
                 let screen_y = (h as f64 / 2.0 - projected_y) as i32;
 
@@ -321,7 +359,11 @@ impl ScreensaverPlugin for Terrain {
                         buf.set(
                             col as u16,
                             row as u16,
-                            Cell { ch, fg: color, bg: PluginColor::Reset },
+                            Cell {
+                                ch,
+                                fg: color,
+                                bg: PluginColor::Reset,
+                            },
                         );
                     }
                 }
@@ -412,7 +454,10 @@ mod tests {
                 break;
             }
         }
-        assert!(has_nonzero, "Permutation table should contain non-zero entries");
+        assert!(
+            has_nonzero,
+            "Permutation table should contain non-zero entries"
+        );
     }
 
     #[test]
@@ -481,7 +526,10 @@ mod tests {
         let result = Terrain::apply_fog(color, 1.0);
         // Should be close to fog target (20, 20, 20)
         if let PluginColor::Rgb(r, g, b) = result {
-            assert!(r <= 25 && g <= 25 && b <= 25, "Full fog should be near-black, got ({r}, {g}, {b})");
+            assert!(
+                r <= 25 && g <= 25 && b <= 25,
+                "Full fog should be near-black, got ({r}, {g}, {b})"
+            );
         } else {
             panic!("Expected Rgb color");
         }
@@ -500,5 +548,53 @@ mod tests {
         t.update(Duration::from_millis(100));
         let mut buf = PluginBuffer::new(40, 20);
         t.render(&mut buf);
+    }
+
+    #[test]
+    fn arrow_keys_change_state() {
+        let mut t = make_terrain();
+        t.init(80, 24);
+
+        let left = KeyInput {
+            code: KeyCode::Left,
+            modifiers: 0,
+        };
+        assert_eq!(t.handle_key(left), EventResponse::Continue);
+        assert!(t.strafe_x < 0.0);
+
+        let right = KeyInput {
+            code: KeyCode::Right,
+            modifiers: 0,
+        };
+        assert_eq!(t.handle_key(right), EventResponse::Continue);
+
+        let up = KeyInput {
+            code: KeyCode::Up,
+            modifiers: 0,
+        };
+        assert_eq!(t.handle_key(up), EventResponse::Continue);
+        assert!(t.altitude_offset > 0.0);
+
+        let down = KeyInput {
+            code: KeyCode::Down,
+            modifiers: 0,
+        };
+        assert_eq!(t.handle_key(down), EventResponse::Continue);
+    }
+
+    #[test]
+    fn unhandled_key_returns_ignored() {
+        let mut t = make_terrain();
+        let key = KeyInput {
+            code: KeyCode::Char('z'),
+            modifiers: 0,
+        };
+        assert_eq!(t.handle_key(key), EventResponse::Ignored);
+    }
+
+    #[test]
+    fn info_is_interactive() {
+        let t = make_terrain();
+        assert!(t.info().interactive);
     }
 }

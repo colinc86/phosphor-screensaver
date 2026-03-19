@@ -1,10 +1,9 @@
 use std::time::Duration;
 
-use serde::Deserialize;
 use phosphor_plugin::{
-    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
-    ScreensaverPlugin,
+    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -142,6 +141,7 @@ impl ScreensaverPlugin for Plasma {
         PluginInfo {
             name: "plasma".into(),
             description: "Demoscene plasma effect with morphing rainbow waves".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "Classic 4-term plasma".into(),
@@ -219,7 +219,15 @@ impl ScreensaverPlugin for Plasma {
                     let color = value_to_color(avg, &self.config.color_mode);
                     let ch = char::from_u32(0x2800 + bits as u32).unwrap_or(' ');
 
-                    buf.set(cx, cy, Cell { ch, fg: color, bg: PluginColor::Reset });
+                    buf.set(
+                        cx,
+                        cy,
+                        Cell {
+                            ch,
+                            fg: color,
+                            bg: PluginColor::Reset,
+                        },
+                    );
                 }
             }
         } else {
@@ -227,7 +235,15 @@ impl ScreensaverPlugin for Plasma {
                 for x in 0..buf.width() {
                     let v = plasma_value(x as f64, y as f64, self.t, self.config.scale);
                     let color = value_to_color(v, &self.config.color_mode);
-                    buf.set(x, y, Cell { ch: ' ', fg: PluginColor::Reset, bg: color });
+                    buf.set(
+                        x,
+                        y,
+                        Cell {
+                            ch: ' ',
+                            fg: PluginColor::Reset,
+                            bg: color,
+                        },
+                    );
                 }
             }
         }

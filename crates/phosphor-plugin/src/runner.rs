@@ -3,9 +3,9 @@
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::time::Duration;
 
+use crate::ScreensaverPlugin;
 use crate::buffer::PluginBuffer;
 use crate::protocol::{HostMessage, PluginMessage};
-use crate::ScreensaverPlugin;
 
 /// Run the plugin main loop. Call this from your plugin's `main()`.
 ///
@@ -97,6 +97,7 @@ mod tests {
             PluginInfo {
                 name: "test".into(),
                 description: "Test plugin".into(),
+                interactive: false,
                 key_bindings: vec![],
                 features: vec![],
                 config_fields: vec![ConfigField {
@@ -188,9 +189,7 @@ mod tests {
             code: crate::protocol::KeyCode::Char('q'),
             modifiers: 0,
         };
-        HostMessage::KeyEvent(key)
-            .write_to(&mut input_buf)
-            .unwrap();
+        HostMessage::KeyEvent(key).write_to(&mut input_buf).unwrap();
         HostMessage::Shutdown.write_to(&mut input_buf).unwrap();
 
         let mut reader = Cursor::new(input_buf);
@@ -199,11 +198,11 @@ mod tests {
 
         message_loop(&mut plugin, &mut buf, &mut reader, &mut output_buf).unwrap();
 
-        // Should get an EventResponse::Ignored back
+        // Should get an EventResponse::Continue back (default handle_key returns Continue)
         let mut cursor = Cursor::new(&output_buf);
         let resp = PluginMessage::read_from(&mut cursor).unwrap();
         match resp {
-            PluginMessage::Event(r) => assert_eq!(r, EventResponse::Ignored),
+            PluginMessage::Event(r) => assert_eq!(r, EventResponse::Continue),
             _ => panic!("expected Event"),
         }
     }

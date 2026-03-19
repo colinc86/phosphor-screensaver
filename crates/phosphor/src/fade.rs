@@ -1,9 +1,9 @@
 use std::time::{Duration, Instant};
 
-use ratatui::style::{Color, Style};
+use rand::Rng;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use rand::Rng;
+use ratatui::style::{Color, Style};
 
 /// Characters used during fade transitions.
 const FADE_CHARS: &[char] = &['░', '▒', '▓', '█', ' '];
@@ -50,10 +50,10 @@ pub fn fade_out(
             for &(x, y) in &cell_order[..cells_to_fill.min(cell_order.len())] {
                 let fade_idx = ((1.0 - progress) * (FADE_CHARS.len() - 1) as f64) as usize;
                 let ch = FADE_CHARS[fade_idx.min(FADE_CHARS.len() - 1)];
-                buf.cell_mut((x, y)).map(|cell| {
+                if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_char(ch);
                     cell.set_style(Style::default().fg(Color::DarkGray));
-                });
+                }
             }
         })?;
 
@@ -65,10 +65,10 @@ pub fn fade_out(
         let area = frame.area();
         for y in 0..area.height {
             for x in 0..area.width {
-                frame.buffer_mut().cell_mut((x, y)).map(|cell| {
+                if let Some(cell) = frame.buffer_mut().cell_mut((x, y)) {
                     cell.set_char(' ');
                     cell.set_style(Style::default());
-                });
+                }
             }
         }
     })?;
@@ -103,10 +103,10 @@ pub fn fade_in(
             let ch = FADE_CHARS[fade_idx.min(FADE_CHARS.len() - 1)];
             for y in 0..area.height {
                 for x in 0..area.width {
-                    buf.cell_mut((x, y)).map(|cell| {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
                         cell.set_char(ch);
                         cell.set_style(Style::default().fg(Color::DarkGray));
-                    });
+                    }
                 }
             }
         })?;

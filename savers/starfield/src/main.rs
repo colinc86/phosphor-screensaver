@@ -1,11 +1,10 @@
 use std::time::Duration;
 
+use phosphor_plugin::{
+    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
+};
 use rand::Rng;
 use serde::Deserialize;
-use phosphor_plugin::{
-    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
-    ScreensaverPlugin,
-};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -100,6 +99,7 @@ impl Starfield {
     }
 
     /// Draw a line between two points, writing graduated brightness chars.
+    #[allow(clippy::too_many_arguments)]
     fn draw_streak(
         buf: &mut PluginBuffer,
         x0: i32,
@@ -134,7 +134,11 @@ impl Starfield {
             buf.set(
                 px as u16,
                 py as u16,
-                Cell { ch, fg: PluginColor::Rgb(b, b, b), bg: PluginColor::Reset },
+                Cell {
+                    ch,
+                    fg: PluginColor::Rgb(b, b, b),
+                    bg: PluginColor::Reset,
+                },
             );
         }
     }
@@ -145,6 +149,7 @@ impl ScreensaverPlugin for Starfield {
         PluginInfo {
             name: "starfield".into(),
             description: "A parallax starfield flying through space".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "3D to 2D projection with depth-based brightness".into(),
@@ -241,10 +246,10 @@ impl ScreensaverPlugin for Starfield {
         for star in &mut self.stars {
             if star.z <= 0.5 {
                 *star = Self::spawn_star(width, height, max_depth, false);
-            } else if let Some((sx, sy)) = Self::project(star.x, star.y, star.z, half_w, half_h) {
-                if sx < -1.0 || sx > width as f64 || sy < -1.0 || sy > height as f64 {
-                    *star = Self::spawn_star(width, height, max_depth, false);
-                }
+            } else if let Some((sx, sy)) = Self::project(star.x, star.y, star.z, half_w, half_h)
+                && (sx < -1.0 || sx > width as f64 || sy < -1.0 || sy > height as f64)
+            {
+                *star = Self::spawn_star(width, height, max_depth, false);
             }
         }
     }
@@ -282,16 +287,7 @@ impl ScreensaverPlugin for Starfield {
 
                 // Only draw streak if there's actual movement (> 1 pixel)
                 if dist.sqrt() > 1.0 {
-                    Self::draw_streak(
-                        buf,
-                        prev_px,
-                        prev_py,
-                        px,
-                        py,
-                        brightness,
-                        w,
-                        h,
-                    );
+                    Self::draw_streak(buf, prev_px, prev_py, px, py, brightness, w, h);
                     continue; // streak already drew the head
                 }
             }
@@ -302,12 +298,26 @@ impl ScreensaverPlugin for Starfield {
             } else if depth_ratio > 0.5 {
                 ('+', PluginColor::Rgb(brightness, brightness, brightness))
             } else if depth_ratio > 0.2 {
-                ('\u{00B7}', PluginColor::Rgb(brightness / 2, brightness / 2, brightness))
+                (
+                    '\u{00B7}',
+                    PluginColor::Rgb(brightness / 2, brightness / 2, brightness),
+                )
             } else {
-                ('.', PluginColor::Rgb(brightness / 3, brightness / 3, brightness / 2))
+                (
+                    '.',
+                    PluginColor::Rgb(brightness / 3, brightness / 3, brightness / 2),
+                )
             };
 
-            buf.set(px as u16, py as u16, Cell { ch, fg: color, bg: PluginColor::Reset });
+            buf.set(
+                px as u16,
+                py as u16,
+                Cell {
+                    ch,
+                    fg: color,
+                    bg: PluginColor::Reset,
+                },
+            );
         }
     }
 }
@@ -420,7 +430,10 @@ mod tests {
         // First update should set prev positions
         sf.update(Duration::from_millis(33));
         // At least some stars should have valid prev positions
-        let has_prev = sf.stars.iter().any(|s| s.prev_sx >= 0.0 && s.prev_sy >= 0.0);
+        let has_prev = sf
+            .stars
+            .iter()
+            .any(|s| s.prev_sx >= 0.0 && s.prev_sy >= 0.0);
         assert!(has_prev);
     }
 

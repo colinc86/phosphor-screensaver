@@ -822,6 +822,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "phosphor-saver-flurry"
+version = "0.1.0"
+dependencies = [
+ "phosphor-plugin",
+ "rand",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "phosphor-saver-game-of-life"
 version = "0.1.0"
 dependencies = [
@@ -873,6 +883,24 @@ dependencies = [
 
 [[package]]
 name = "phosphor-saver-plasma"
+version = "0.1.0"
+dependencies = [
+ "phosphor-plugin",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "phosphor-saver-road-racer"
+version = "0.1.0"
+dependencies = [
+ "phosphor-plugin",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "phosphor-saver-rotating-cube"
 version = "0.1.0"
 dependencies = [
  "phosphor-plugin",

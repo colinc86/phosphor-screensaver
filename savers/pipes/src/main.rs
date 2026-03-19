@@ -1,11 +1,10 @@
 use std::time::Duration;
 
+use phosphor_plugin::{
+    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
+};
 use rand::Rng;
 use serde::Deserialize;
-use phosphor_plugin::{
-    Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo,
-    ScreensaverPlugin,
-};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -65,14 +64,14 @@ fn pipe_char(from: Direction, to: Direction) -> char {
     match (from, to) {
         // Straight
         (Up, Up) | (Down, Down) => '\u{2502}',       // │
-        (Left, Left) | (Right, Right) => '\u{2500}',  // ─
+        (Left, Left) | (Right, Right) => '\u{2500}', // ─
         // Corners
-        (Up, Right) | (Left, Down) => '\u{250C}',     // ┌
-        (Up, Left) | (Right, Down) => '\u{2510}',     // ┐
-        (Down, Right) | (Left, Up) => '\u{2514}',     // └
-        (Down, Left) | (Right, Up) => '\u{2518}',     // ┘
+        (Up, Right) | (Left, Down) => '\u{250C}', // ┌
+        (Up, Left) | (Right, Down) => '\u{2510}', // ┐
+        (Down, Right) | (Left, Up) => '\u{2514}', // └
+        (Down, Left) | (Right, Up) => '\u{2518}', // ┘
         // Fallback
-        _ => '\u{253C}',                               // ┼
+        _ => '\u{253C}', // ┼
     }
 }
 
@@ -80,8 +79,8 @@ fn pipe_char(from: Direction, to: Direction) -> char {
 fn junction_char(existing_horizontal: bool, new_horizontal: bool) -> char {
     match (existing_horizontal, new_horizontal) {
         (true, false) | (false, true) => '\u{253C}', // ┼ perpendicular crossing
-        (true, true) => '\u{2550}',                   // ═ horizontal overlap
-        (false, false) => '\u{2551}',                 // ║ vertical overlap
+        (true, true) => '\u{2550}',                  // ═ horizontal overlap
+        (false, false) => '\u{2551}',                // ║ vertical overlap
     }
 }
 
@@ -253,6 +252,7 @@ impl ScreensaverPlugin for Pipes {
         PluginInfo {
             name: "pipes".into(),
             description: "Random pipe drawing with colorful box-drawing characters".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "Box-drawing pipe characters".into(),
@@ -444,7 +444,11 @@ impl ScreensaverPlugin for Pipes {
                     buf.set(
                         x as u16,
                         y as u16,
-                        Cell { ch: info.ch, fg: info.color, bg: PluginColor::Reset },
+                        Cell {
+                            ch: info.ch,
+                            fg: info.color,
+                            bg: PluginColor::Reset,
+                        },
                     );
                 }
             }
@@ -459,22 +463,31 @@ impl ScreensaverPlugin for Pipes {
                     buf.set(
                         fx,
                         fy,
-                        Cell { ch: '\u{25CF}', fg: flow.color, bg: PluginColor::Reset },
+                        Cell {
+                            ch: '\u{25CF}',
+                            fg: flow.color,
+                            bg: PluginColor::Reset,
+                        },
                     );
                 }
             }
             // Glow: briefly brighten cells the flow just passed
             if idx > 0 && idx - 1 < flow.path.len() {
                 let (gx, gy) = flow.path[idx - 1];
-                if gx < self.width && gy < self.height {
-                    if let Some(info) = &self.grid[gy as usize][gx as usize] {
-                        let bright_color = brighten(info.color);
-                        buf.set(
-                            gx,
-                            gy,
-                            Cell { ch: info.ch, fg: bright_color, bg: PluginColor::Reset },
-                        );
-                    }
+                if gx < self.width
+                    && gy < self.height
+                    && let Some(info) = &self.grid[gy as usize][gx as usize]
+                {
+                    let bright_color = brighten(info.color);
+                    buf.set(
+                        gx,
+                        gy,
+                        Cell {
+                            ch: info.ch,
+                            fg: bright_color,
+                            bg: PluginColor::Reset,
+                        },
+                    );
                 }
             }
         }
@@ -563,12 +576,7 @@ mod tests {
             pipes.update(Duration::from_millis(33));
         }
         // At least some grid cells should be filled
-        let filled = pipes
-            .grid
-            .iter()
-            .flatten()
-            .filter(|c| c.is_some())
-            .count();
+        let filled = pipes.grid.iter().flatten().filter(|c| c.is_some()).count();
         assert!(filled > 0);
         assert_eq!(filled, pipes.fill_count);
     }

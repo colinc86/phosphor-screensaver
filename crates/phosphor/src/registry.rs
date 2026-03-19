@@ -41,13 +41,9 @@ pub fn create_plugin(name: &str, config: &Config) -> Option<Box<dyn PluginRender
     }
     let plugin = find(name)?;
     let config_json = config.screensaver_config_json(name);
-    SubprocessPlugin::spawn(
-        plugin.path.to_str().unwrap_or(""),
-        name,
-        &config_json,
-    )
-    .ok()
-    .map(|s| Box::new(s) as Box<dyn PluginRenderer>)
+    SubprocessPlugin::spawn(plugin.path.to_str().unwrap_or(""), name, &config_json)
+        .ok()
+        .map(|s| Box::new(s) as Box<dyn PluginRenderer>)
 }
 
 /// Create a random PluginRenderer.
@@ -55,21 +51,19 @@ pub fn create_random_plugin(config: &Config) -> Box<dyn PluginRenderer> {
     use rand::Rng;
     let all = plugins();
     if all.is_empty() {
-        panic!("No screensaver plugins found. Ensure phosphor-saver-* binaries are in the same directory as phosphor.");
+        panic!(
+            "No screensaver plugins found. Ensure phosphor-saver-* binaries are in the same directory as phosphor."
+        );
     }
     let mut rng = rand::rng();
     let idx = rng.random_range(0..all.len());
     let name = &all[idx].name;
     let config_json = config.screensaver_config_json(name);
-    SubprocessPlugin::spawn(
-        all[idx].path.to_str().unwrap_or(""),
-        name,
-        &config_json,
-    )
-    .unwrap_or_else(|e| {
-        panic!("Failed to spawn random screensaver '{}': {}", name, e);
-    })
-    .into()
+    SubprocessPlugin::spawn(all[idx].path.to_str().unwrap_or(""), name, &config_json)
+        .unwrap_or_else(|e| {
+            panic!("Failed to spawn random screensaver '{}': {}", name, e);
+        })
+        .into()
 }
 
 impl From<SubprocessPlugin> for Box<dyn PluginRenderer> {
@@ -87,16 +81,16 @@ fn discover_plugins() -> Vec<DiscoveredPlugin> {
             for entry in entries.flatten() {
                 let path = entry.path();
                 let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if fname.starts_with("phosphor-saver-") && is_executable(&path) {
-                    if let Some(info) = query_plugin_info(&path) {
-                        if seen.insert(info.name.clone()) {
-                            plugins.push(DiscoveredPlugin {
-                                name: info.name.clone(),
-                                path: path.clone(),
-                                info,
-                            });
-                        }
-                    }
+                if fname.starts_with("phosphor-saver-")
+                    && is_executable(&path)
+                    && let Some(info) = query_plugin_info(&path)
+                    && seen.insert(info.name.clone())
+                {
+                    plugins.push(DiscoveredPlugin {
+                        name: info.name.clone(),
+                        path: path.clone(),
+                        info,
+                    });
                 }
             }
         }
@@ -119,10 +113,10 @@ fn plugin_search_paths() -> Vec<PathBuf> {
     paths.push(PathBuf::from("/usr/share/phosphor/plugins"));
 
     // Same directory as host binary
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            paths.push(dir.to_path_buf());
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        paths.push(dir.to_path_buf());
     }
 
     paths
@@ -137,10 +131,7 @@ fn is_executable(path: &PathBuf) -> bool {
 }
 
 fn query_plugin_info(path: &PathBuf) -> Option<phosphor_plugin::PluginInfo> {
-    let output = Command::new(path)
-        .arg("--info")
-        .output()
-        .ok()?;
+    let output = Command::new(path).arg("--info").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -157,7 +148,9 @@ mod tests {
         let paths = plugin_search_paths();
         assert!(!paths.is_empty());
         // Should include the directory of the current executable
-        let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf()));
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|e| e.parent().map(|p| p.to_path_buf()));
         if let Some(dir) = exe_dir {
             assert!(paths.contains(&dir));
         }

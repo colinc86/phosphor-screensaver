@@ -1,11 +1,11 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use rand::Rng;
-use serde::Deserialize;
 use phosphor_plugin::{
     Cell, ConfigField, FieldKind, PluginBuffer, PluginColor, PluginInfo, ScreensaverPlugin,
 };
+use rand::Rng;
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -34,12 +34,12 @@ impl Default for BouncingBallConfig {
 }
 
 const BALL_COLORS: [(u8, u8, u8); 6] = [
-    (0, 255, 255),   // Cyan
-    (255, 0, 255),   // Magenta
-    (255, 255, 0),   // Yellow
-    (0, 255, 0),     // Green
-    (255, 0, 0),     // Red
-    (0, 0, 255),     // Blue
+    (0, 255, 255), // Cyan
+    (255, 0, 255), // Magenta
+    (255, 255, 0), // Yellow
+    (0, 255, 0),   // Green
+    (255, 0, 0),   // Red
+    (0, 0, 255),   // Blue
 ];
 
 fn hsv_to_rgb(h: f64, s: f64, v: f64) -> (u8, u8, u8) {
@@ -236,11 +236,7 @@ impl BouncingBall {
         self.sparks.retain(|s| s.lifetime > 0.0);
     }
 
-    fn trail_cell(
-        &self,
-        point: &TrailPoint,
-        ball_color: (u8, u8, u8),
-    ) -> (char, PluginColor) {
+    fn trail_cell(&self, point: &TrailPoint, ball_color: (u8, u8, u8)) -> (char, PluginColor) {
         let intensity = 1.0 - (point.age as f64 / self.trail_length as f64);
         let intensity = intensity.clamp(0.0, 1.0);
 
@@ -267,11 +263,8 @@ impl BouncingBall {
                 // "dots"
                 let gray = (intensity * 200.0) as u8;
                 let _ = ball_color;
-                let color = PluginColor::Rgb(
-                    (gray as f64 * 0.3) as u8,
-                    (gray as f64 * 0.8) as u8,
-                    gray,
-                );
+                let color =
+                    PluginColor::Rgb((gray as f64 * 0.3) as u8, (gray as f64 * 0.8) as u8, gray);
                 ('\u{00B7}', color)
             }
         }
@@ -283,6 +276,7 @@ impl ScreensaverPlugin for BouncingBall {
         PluginInfo {
             name: "bouncing_ball".into(),
             description: "A ball bouncing around the screen with a colorful trail".into(),
+            interactive: false,
             key_bindings: vec![("Any key".into(), "Exit screensaver".into())],
             features: vec![
                 "Multiple balls with collisions".into(),
@@ -323,7 +317,12 @@ impl ScreensaverPlugin for BouncingBall {
                     label: "Gravity".into(),
                     kind: FieldKind::Text,
                     default: "none".into(),
-                    choices: Some(vec!["none".into(), "down".into(), "center".into(), "wave".into()]),
+                    choices: Some(vec![
+                        "none".into(),
+                        "down".into(),
+                        "center".into(),
+                        "wave".into(),
+                    ]),
                 },
                 ConfigField {
                     key: "trail_style".into(),
@@ -358,7 +357,11 @@ impl ScreensaverPlugin for BouncingBall {
         for ball in &mut self.balls {
             let px = ball.x.round() as u16;
             let py = ball.y.round() as u16;
-            ball.trail.push_back(TrailPoint { x: px, y: py, age: 0 });
+            ball.trail.push_back(TrailPoint {
+                x: px,
+                y: py,
+                age: 0,
+            });
 
             for point in &mut ball.trail {
                 point.age += 1;
@@ -425,7 +428,15 @@ impl ScreensaverPlugin for BouncingBall {
             for point in &ball.trail {
                 if point.x < buf.width() && point.y < buf.height() {
                     let (ch, fg) = self.trail_cell(point, ball.color);
-                    buf.set(point.x, point.y, Cell { ch, fg, bg: PluginColor::Reset });
+                    buf.set(
+                        point.x,
+                        point.y,
+                        Cell {
+                            ch,
+                            fg,
+                            bg: PluginColor::Reset,
+                        },
+                    );
                 }
             }
         }
@@ -439,7 +450,15 @@ impl ScreensaverPlugin for BouncingBall {
                 let r = (255.0 * intensity) as u8;
                 let g = (200.0 * intensity) as u8;
                 let b = (50.0 * intensity) as u8;
-                buf.set(sx, sy, Cell { ch: '*', fg: PluginColor::Rgb(r, g, b), bg: PluginColor::Reset });
+                buf.set(
+                    sx,
+                    sy,
+                    Cell {
+                        ch: '*',
+                        fg: PluginColor::Rgb(r, g, b),
+                        bg: PluginColor::Reset,
+                    },
+                );
             }
         }
 
@@ -450,7 +469,15 @@ impl ScreensaverPlugin for BouncingBall {
             let by = ball.y.round() as u16;
             if bx < buf.width() && by < buf.height() {
                 let (cr, cg, cb) = ball.color;
-                buf.set(bx, by, Cell { ch, fg: PluginColor::Rgb(cr, cg, cb), bg: PluginColor::Reset });
+                buf.set(
+                    bx,
+                    by,
+                    Cell {
+                        ch,
+                        fg: PluginColor::Rgb(cr, cg, cb),
+                        bg: PluginColor::Reset,
+                    },
+                );
             }
         }
     }
@@ -569,8 +596,7 @@ mod tests {
         for i in 0..saver.balls.len() {
             for j in (i + 1)..saver.balls.len() {
                 assert!(
-                    saver.balls[i].x != saver.balls[j].x
-                        || saver.balls[i].y != saver.balls[j].y,
+                    saver.balls[i].x != saver.balls[j].x || saver.balls[i].y != saver.balls[j].y,
                     "Balls {i} and {j} should have different positions"
                 );
             }
