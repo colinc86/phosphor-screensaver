@@ -23,6 +23,10 @@ while [[ $# -gt 0 ]]; do
         --prefix=*) PREFIX="${1#*=}"; shift ;;
         -h|--help)
             echo "Usage: ./install.sh [--no-pam] [--prefix PATH]"
+            echo ""
+            echo "  curl -sSL https://raw.githubusercontent.com/colinc86/phosphor/main/install.sh | bash"
+            echo "  curl -sSL ... | bash -s -- --no-pam --prefix ~/.local/bin"
+            echo ""
             echo "  --no-pam       Build without PAM support"
             echo "  --prefix PATH  Install directory (default: /usr/local/bin)"
             exit 0
@@ -30,6 +34,30 @@ while [[ $# -gt 0 ]]; do
         *) error "Unknown option: $1"; exit 1 ;;
     esac
 done
+
+# Resolve relative PREFIX to absolute before we potentially cd elsewhere
+if [[ "$PREFIX" != /* ]]; then
+    PREFIX="$(pwd)/$PREFIX"
+fi
+
+# --- Mode detection ---
+
+REPO_URL="https://github.com/colinc86/phosphor.git"
+SRCDIR=""
+CLEANUP_DIR=""
+
+if [[ -f "Cargo.toml" ]] && grep -q '^\[workspace\]' Cargo.toml; then
+    SRCDIR="$(pwd)"
+else
+    SRCDIR=""
+fi
+
+cleanup() {
+    if [[ -n "$CLEANUP_DIR" ]] && [[ -d "$CLEANUP_DIR" ]]; then
+        rm -rf "$CLEANUP_DIR"
+    fi
+}
+trap cleanup EXIT
 
 heading "Phosphor Installer"
 
@@ -50,6 +78,25 @@ if [[ "$OS" == "Linux" ]] && [[ "$NO_PAM" == false ]]; then
         warn "Install it (e.g. sudo apt install libpam0g-dev) or use --no-pam"
     fi
 fi
+
+# --- Clone if needed ---
+
+if [[ -z "$SRCDIR" ]]; then
+    if ! command -v git &>/dev/null; then
+        error "git not found. Install git to continue."
+        exit 1
+    fi
+    info "git found: $(git --version)"
+
+    CLEANUP_DIR="$(mktemp -d)"
+    SRCDIR="$CLEANUP_DIR/phosphor"
+
+    heading "Cloning repository..."
+    git clone --depth 1 "$REPO_URL" "$SRCDIR"
+    info "Cloned to temporary directory"
+fi
+
+cd "$SRCDIR"
 
 # --- Build ---
 

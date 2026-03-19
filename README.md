@@ -11,6 +11,19 @@ Phosphor is a screensaver system for your terminal. It watches for idle time, fa
 ## Install
 
 ```bash
+curl -sSL https://raw.githubusercontent.com/colinc86/phosphor/main/install.sh | bash
+```
+
+Or with options:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/colinc86/phosphor/main/install.sh | bash -s -- --no-pam
+curl -sSL https://raw.githubusercontent.com/colinc86/phosphor/main/install.sh | bash -s -- --prefix ~/.local/bin
+```
+
+**From source:**
+
+```bash
 git clone https://github.com/colinc86/phosphor.git
 cd phosphor
 ./install.sh
